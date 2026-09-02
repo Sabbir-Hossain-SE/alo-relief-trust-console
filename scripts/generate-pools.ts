@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 // Faker runs here, once, rather than 500,000 times at runtime. The corpus then
 // composes records by indexing into these pools, which is what keeps a
@@ -94,6 +94,22 @@ const FAMILY_NAMES = [
   'Sikder',
   'Gazi',
   'Halder',
+  'Molla',
+  'Fakir',
+  'Munshi',
+  'Pramanik',
+  'Sardar',
+  'Dewan',
+  'Majumder',
+  'Bepari',
+  'Matubbar',
+  'Khatun',
+  'Parvez',
+  'Zaman',
+  'Kabir',
+  'Alam',
+  'Haque',
+  'Mazumdar',
 ];
 
 const DISTRICTS = [
@@ -178,17 +194,22 @@ const PROGRAMS = [
   'Winter Clothing Distribution',
 ];
 
-// Builds a stable pool of unique full names from the curated parts.
+// Builds a stable pool of unique full names by shuffling the whole cross
+// product. Drawing at random until the set fills cannot terminate once the
+// target approaches the number of possible combinations.
 function buildNames(): string[] {
-  const seen = new Set<string>();
+  const combinations = GIVEN_NAMES.flatMap((given) =>
+    FAMILY_NAMES.map((family) => `${given} ${family}`),
+  );
 
-  while (seen.size < NAME_COUNT) {
-    const given = faker.helpers.arrayElement(GIVEN_NAMES);
-    const family = faker.helpers.arrayElement(FAMILY_NAMES);
-    seen.add(`${given} ${family}`);
+  if (NAME_COUNT > combinations.length) {
+    throw new Error(
+      `NAME_COUNT is ${NAME_COUNT} but only ${combinations.length} unique names can be built. ` +
+        'Add more given or family names, or lower NAME_COUNT.',
+    );
   }
 
-  return [...seen];
+  return faker.helpers.shuffle(combinations).slice(0, NAME_COUNT);
 }
 
 // Builds the upazila-level locations operators actually see on a form.
@@ -216,6 +237,7 @@ const contents = [
   serialize('PROGRAM_POOL', PROGRAMS),
 ].join('\n');
 
+mkdirSync(dirname(OUTPUT), { recursive: true });
 writeFileSync(OUTPUT, contents);
 
 console.log(`Wrote ${OUTPUT}`);
