@@ -2,15 +2,23 @@ import { buildColumnStore, storeBytes } from '../src/server/corpus/columnStore';
 import { detailAt, summaryAt } from '../src/server/corpus/documentAt';
 import { generateCore } from '../src/server/corpus/generate';
 import { createOverlay } from '../src/server/corpus/overlay';
+import {
+  countByStatus,
+  filterIndices,
+  queryDocuments,
+  sortIndices,
+} from '../src/server/corpus/query';
 import { DEFAULT_ARCHIVE_SIZE, DEFAULT_SEED } from '../src/server/corpus/config';
 
 const SIZE = Number(process.argv[2]) || DEFAULT_ARCHIVE_SIZE;
 const OBJECT_SAMPLE = 20_000;
 
-function time(label: string, run: () => void): void {
+// Times a call and hands its result back, so timings never need a mutable outer.
+function time<T>(label: string, run: () => T): T {
   const start = performance.now();
-  run();
+  const result = run();
   console.log(`  ${label.padEnd(38)} ${(performance.now() - start).toFixed(1).padStart(8)} ms`);
+  return result;
 }
 
 function mb(bytes: number): string {
@@ -45,6 +53,50 @@ async function main(): Promise<void> {
   time('regenerate 10,000 cores', () => {
     for (let i = 0; i < 10_000; i += 1) generateCore(DEFAULT_SEED, i);
   });
+
+  console.log('');
+
+  const all = time('filter: no filters (full scan)', () => filterIndices(store, overlay, {}));
+
+  time('filter: by status', () => {
+    filterIndices(store, overlay, { status: ['failed', 'needs_review'] });
+  });
+
+  time('filter: by status + type + confidence', () => {
+    filterIndices(store, overlay, {
+      status: ['completed'],
+      documentType: ['enrollment_form', 'medical_intake'],
+      confidence: ['high'],
+    });
+  });
+
+  time('search: free text across pooled names', () => {
+    filterIndices(store, overlay, { search: 'rah' });
+  });
+
+  time('sort: by upload date, full archive', () => {
+    sortIndices(store, all, 'uploadedAt', 'desc');
+  });
+
+  time('sort: by confidence, full archive', () => {
+    sortIndices(store, all, 'confidence', 'desc');
+  });
+
+  time('count by status', () => {
+    countByStatus(store, overlay);
+  });
+
+  const page = time('full query: filter + sort + page of 50', () =>
+    queryDocuments(store, overlay, {
+      status: ['completed'],
+      sortField: 'confidence',
+      sortDirection: 'desc',
+      pageSize: 50,
+    }),
+  );
+
+  console.log(`  ${'  → rows returned'.padEnd(38)} ${String(page.rows.length).padStart(8)}`);
+  console.log(`  ${'  → matching documents'.padEnd(38)} ${String(page.total).padStart(8)}`);
 
   // Measured rather than estimated: hold a real sample so it cannot be
   // collected, then extrapolate from the heap delta.
