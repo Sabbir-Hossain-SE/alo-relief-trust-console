@@ -10,7 +10,10 @@ import { generateCore } from './generate';
  */
 export type ColumnStore = {
   readonly seed: number;
-  readonly size: number;
+  /** Documents currently in the archive. Grows as uploads arrive. */
+  size: number;
+  /** Rows allocated up front, so an upload never reallocates the columns. */
+  readonly capacity: number;
   readonly statusId: Uint8Array;
   readonly docTypeId: Uint8Array;
   readonly programId: Uint8Array;
@@ -25,47 +28,93 @@ export type ColumnStore = {
   readonly uploadedAt: Float64Array;
 };
 
-// Materializes the scalar columns for an archive of the given size.
-export function buildColumnStore(seed: number, size: number): ColumnStore {
+// Fills one row from the generator.
+function writeRow(store: ColumnStore, index: number): void {
+  const core = generateCore(store.seed, index);
+
+  store.statusId[index] = core.statusId;
+  store.docTypeId[index] = core.docTypeId;
+  store.programId[index] = core.programId;
+  store.errorId[index] = core.errorId;
+  store.attempts[index] = core.attempts;
+  store.pageCount[index] = core.pageCount;
+  store.missingMask[index] = core.missingMask;
+  store.nameId[index] = core.nameId;
+  store.locationId[index] = core.locationId;
+  store.sizeBytes[index] = core.sizeBytes;
+  store.confidence[index] = core.overallConfidence;
+  store.uploadedAt[index] = core.uploadedAt;
+}
+
+/**
+ * Materializes the scalar columns for an archive of the given size.
+ *
+ * `headroom` reserves rows for documents uploaded later. Allocating them up
+ * front costs about a third of a byte per row and means an upload never has to
+ * reallocate and copy twelve typed arrays mid-session.
+ */
+export function buildColumnStore(seed: number, size: number, headroom = 0): ColumnStore {
   if (!Number.isInteger(size) || size < 0) {
     throw new RangeError(`Archive size must be a non-negative integer, received ${size}`);
   }
 
+  if (!Number.isInteger(headroom) || headroom < 0) {
+    throw new RangeError(`Headroom must be a non-negative integer, received ${headroom}`);
+  }
+
+  const capacity = size + headroom;
+
   const store: ColumnStore = {
     seed,
     size,
-    statusId: new Uint8Array(size),
-    docTypeId: new Uint8Array(size),
-    programId: new Uint8Array(size),
-    errorId: new Uint8Array(size),
-    attempts: new Uint8Array(size),
-    pageCount: new Uint8Array(size),
-    missingMask: new Uint8Array(size),
-    nameId: new Uint32Array(size),
-    locationId: new Uint32Array(size),
-    sizeBytes: new Uint32Array(size),
-    confidence: new Float32Array(size),
-    uploadedAt: new Float64Array(size),
+    capacity,
+    statusId: new Uint8Array(capacity),
+    docTypeId: new Uint8Array(capacity),
+    programId: new Uint8Array(capacity),
+    errorId: new Uint8Array(capacity),
+    attempts: new Uint8Array(capacity),
+    pageCount: new Uint8Array(capacity),
+    missingMask: new Uint8Array(capacity),
+    nameId: new Uint32Array(capacity),
+    locationId: new Uint32Array(capacity),
+    sizeBytes: new Uint32Array(capacity),
+    confidence: new Float32Array(capacity),
+    uploadedAt: new Float64Array(capacity),
   };
 
-  for (let index = 0; index < size; index += 1) {
-    const core = generateCore(seed, index);
-
-    store.statusId[index] = core.statusId;
-    store.docTypeId[index] = core.docTypeId;
-    store.programId[index] = core.programId;
-    store.errorId[index] = core.errorId;
-    store.attempts[index] = core.attempts;
-    store.pageCount[index] = core.pageCount;
-    store.missingMask[index] = core.missingMask;
-    store.nameId[index] = core.nameId;
-    store.locationId[index] = core.locationId;
-    store.sizeBytes[index] = core.sizeBytes;
-    store.confidence[index] = core.overallConfidence;
-    store.uploadedAt[index] = core.uploadedAt;
-  }
+  for (let index = 0; index < size; index += 1) writeRow(store, index);
 
   return store;
+}
+
+/**
+ * Adds documents to the archive and returns their indices.
+ *
+ * New rows are generated the same way as the rest of the archive, so an
+ * uploaded document is indistinguishable from an archived one once processed.
+ */
+export function appendDocuments(store: ColumnStore, count: number): Uint32Array {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new RangeError(`Document count must be a non-negative integer, received ${count}`);
+  }
+
+  if (store.size + count > store.capacity) {
+    throw new RangeError(
+      `Cannot add ${count} documents: capacity is ${store.capacity} and ${store.size} are in use`,
+    );
+  }
+
+  const added = new Uint32Array(count);
+
+  for (let offset = 0; offset < count; offset += 1) {
+    const index = store.size + offset;
+    writeRow(store, index);
+    added[offset] = index;
+  }
+
+  store.size += count;
+
+  return added;
 }
 
 // Total bytes held by the store's columns, for the memory claim in the README.
