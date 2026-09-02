@@ -36,6 +36,15 @@ export type NormalizedRecord = {
   documentDate: ExtractedField<string>;
 };
 
+// Stable order for the normalized fields, so generation and rendering agree.
+export const NORMALIZED_FIELD_KEYS = [
+  'personName',
+  'phone',
+  'location',
+  'programName',
+  'documentDate',
+] as const satisfies readonly (keyof NormalizedRecord)[];
+
 export const NORMALIZED_FIELD_LABELS: Record<keyof NormalizedRecord, string> = {
   personName: 'Person name',
   phone: 'Phone',
