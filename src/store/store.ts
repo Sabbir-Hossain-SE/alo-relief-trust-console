@@ -1,10 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { api } from './api';
+import { preferencesReducer } from './preferences';
 
 // Builds a fresh store. A factory rather than a singleton so tests get isolation.
 export function makeStore() {
   return configureStore({
-    reducer: { [api.reducerPath]: api.reducer },
+    reducer: { [api.reducerPath]: api.reducer, preferences: preferencesReducer },
     middleware: (getDefault) => getDefault().concat(api.middleware),
 
     // Left on outside tests, including the deployed demo. This is a prototype

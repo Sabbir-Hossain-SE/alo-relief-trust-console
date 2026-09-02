@@ -3,6 +3,12 @@
 import { useState, type ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { makeStore } from './store';
+import { usePreferencesSync } from './usePreferences';
+
+function PreferencesSync() {
+  usePreferencesSync();
+  return null;
+}
 
 // Creates the store once per client, not once per module, so it never leaks
 // between requests during server rendering. Lazy state rather than a ref, since
@@ -10,5 +16,10 @@ import { makeStore } from './store';
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [store] = useState(makeStore);
 
-  return <Provider store={store}>{children}</Provider>;
+  return (
+    <Provider store={store}>
+      <PreferencesSync />
+      {children}
+    </Provider>
+  );
 }
