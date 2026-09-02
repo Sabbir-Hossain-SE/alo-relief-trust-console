@@ -1,0 +1,34 @@
+name: Task
+description: A unit of implementation work.
+title: '[area] '
+labels: []
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What this task delivers, and why it matters to the product.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist that defines done.
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: input
+    id: blocked_by
+    attributes:
+      label: Blocked by
+      description: Issue numbers this depends on, e.g. "#3, #4". Leave blank if none.
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files expected to change
+      description: Rough scope, so the PR stays reviewable.
