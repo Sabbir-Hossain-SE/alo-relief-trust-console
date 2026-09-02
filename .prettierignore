@@ -1,0 +1,10 @@
+.next
+out
+build
+coverage
+node_modules
+pnpm-lock.yaml
+playwright-report
+test-results
+public/mockServiceWorker.js
+src/server/corpus/pools.generated.ts
