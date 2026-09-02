@@ -1,0 +1,83 @@
+{
+  "name": "alo-relief-trust-console",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "e2e": "playwright test",
+    "gen:pools": "tsx scripts/generate-pools.ts",
+    "bench": "tsx scripts/bench.ts",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@emotion/cache": "11.14.0",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@hookform/resolvers": "5.9.1",
+    "@mui/icons-material": "9.4.0",
+    "@mui/material": "9.4.0",
+    "@mui/material-nextjs": "9.4.0",
+    "@mui/x-data-grid": "9.12.0",
+    "@reduxjs/toolkit": "2.12.0",
+    "motion": "13.1.1",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hook-form": "7.87.0",
+    "react-redux": "9.3.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
+    "@faker-js/faker": "10.6.0",
+    "@playwright/test": "1.62.1",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "6.1.1",
+    "@vitest/coverage-v8": "4.1.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "husky": "9.1.7",
+    "jsdom": "30.0.1",
+    "lint-staged": "17.4.1",
+    "msw": "2.15.0",
+    "prettier": "3.9.6",
+    "tailwindcss": "^4",
+    "tsx": "4.23.13",
+    "typescript": "^5",
+    "vitest": "4.1.11"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md,mjs}": [
+      "prettier --write"
+    ]
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  },
+  "packageManager": "pnpm@9.15.3"
+}
