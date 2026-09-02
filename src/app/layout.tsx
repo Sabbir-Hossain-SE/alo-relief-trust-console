@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { AppShell } from '@/components/layout/AppShell';
 import { MockApiProvider } from '@/server/MockApiProvider';
+import { StoreProvider } from '@/store/StoreProvider';
 import { ThemeRegistry } from '@/theme/ThemeRegistry';
 import './globals.css';
 
@@ -37,9 +38,11 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="min-h-full">
         <InitColorSchemeScript attribute="class" defaultMode="system" />
         <ThemeRegistry>
-          <AppShell>
-            <MockApiProvider>{children}</MockApiProvider>
-          </AppShell>
+          <StoreProvider>
+            <AppShell>
+              <MockApiProvider>{children}</MockApiProvider>
+            </AppShell>
+          </StoreProvider>
         </ThemeRegistry>
       </body>
     </html>

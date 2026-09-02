@@ -1,0 +1,79 @@
+'use client';
+
+import { useState } from 'react';
+import type { DocumentQueryInput } from '@/server/api-contract';
+import {
+  useGetBatchQuery,
+  useGetBatchesQuery,
+  useGetDocumentsQuery,
+  useGetSummaryQuery,
+} from './api';
+
+/** Fast enough to feel live, slow enough not to hammer the worker. */
+export const POLL_INTERVAL_MS = 1500;
+
+/**
+ * Watches one batch, polling only while it still has work.
+ *
+ * A fixed `pollingInterval` keeps refetching long after a batch has settled,
+ * burning battery and CPU for no new information. The interval is derived from
+ * the batch's own last response, and adjusted during render rather than in an
+ * effect, so polling stops on the same commit that reports the work finished
+ * instead of one tick later.
+ */
+export function useBatch(batchId: string | undefined) {
+  const [interval, setPollInterval] = useState(POLL_INTERVAL_MS);
+
+  const result = useGetBatchQuery(batchId ?? '', {
+    skip: batchId === undefined,
+    pollingInterval: interval,
+  });
+
+  const desired = result.data !== undefined && result.data.settled ? 0 : POLL_INTERVAL_MS;
+  if (interval !== desired) setPollInterval(desired);
+
+  return result;
+}
+
+/** Watches every batch, polling only while at least one is unfinished. */
+export function useBatches() {
+  const [interval, setPollInterval] = useState(POLL_INTERVAL_MS);
+
+  const result = useGetBatchesQuery(undefined, { pollingInterval: interval });
+
+  const anyRunning = result.data?.some((batch) => !batch.settled) ?? false;
+  const desired = result.data !== undefined && !anyRunning ? 0 : POLL_INTERVAL_MS;
+  if (interval !== desired) setPollInterval(desired);
+
+  return result;
+}
+
+/**
+ * Reports whether processing is currently changing the archive.
+ *
+ * Backed by `useBatches`, so it carries its own polling rather than depending
+ * on some other component happening to subscribe. Identical subscriptions are
+ * deduplicated, so several callers still produce one request.
+ */
+export function useArchiveIsChanging(): boolean {
+  const { data } = useBatches();
+  return data?.some((batch) => !batch.settled) ?? false;
+}
+
+/** The archive counts, refreshed only while a batch is moving them. */
+export function useSummary() {
+  const changing = useArchiveIsChanging();
+
+  return useGetSummaryQuery(undefined, {
+    pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+  });
+}
+
+/** A page of documents, refreshed only while processing is changing what is on it. */
+export function useDocuments(query: DocumentQueryInput) {
+  const changing = useArchiveIsChanging();
+
+  return useGetDocumentsQuery(query, {
+    pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+  });
+}
