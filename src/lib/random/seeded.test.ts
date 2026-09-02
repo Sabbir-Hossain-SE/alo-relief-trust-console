@@ -17,13 +17,16 @@ describe('createRandom', () => {
 
   it('stays within [0, 1) across a long run', () => {
     const random = createRandom(7);
+    const bad: string[] = [];
 
-    for (let i = 0; i < 200_000; i += 1) {
+    // Collected rather than asserted per draw: 200,000 expect() calls cost
+    // seconds, and a count tells you far less than the offending draw does.
+    for (let i = 0; i < 200_000 && bad.length < 5; i += 1) {
       const value = random();
-      expect(Number.isFinite(value)).toBe(true);
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThan(1);
+      if (!Number.isFinite(value) || value < 0 || value >= 1) bad.push(`draw ${i}: ${value}`);
     }
+
+    expect(bad).toEqual([]);
   });
 
   it('handles a zero seed', () => {

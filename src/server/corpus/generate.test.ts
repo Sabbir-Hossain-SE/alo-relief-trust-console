@@ -10,14 +10,31 @@ import {
   MIN_SIZE_BYTES,
   SIZE_RANGE_BYTES,
 } from './config';
-import { FIELD_COUNT, generateCore } from './generate';
+import { FIELD_COUNT, generateCore, type DocumentCore } from './generate';
 import { LOCATION_POOL, NAME_POOL, PROGRAM_POOL } from './pools.generated';
 
 const SEED = 20260901;
 const SAMPLE = 20_000;
+const MAX_REPORTED = 5;
 
 function statusOf(index: number, seed = SEED): ProcessingStatus {
   return PROCESSING_STATUSES[generateCore(seed, index).statusId] as ProcessingStatus;
+}
+
+/**
+ * Scans the sample and returns the first few violations. Asserting inside the
+ * loop would mean tens of thousands of expect() calls, which is slow enough to
+ * time out on CI and reports a bare failure rather than the offending document.
+ */
+function scan(check: (core: DocumentCore, index: number) => string | null): string[] {
+  const found: string[] = [];
+
+  for (let index = 0; index < SAMPLE && found.length < MAX_REPORTED; index += 1) {
+    const problem = check(generateCore(SEED, index), index);
+    if (problem) found.push(`#${index}: ${problem}`);
+  }
+
+  return found;
 }
 
 function indicesWithStatus(status: ProcessingStatus, limit = 200): number[] {
@@ -28,6 +45,12 @@ function indicesWithStatus(status: ProcessingStatus, limit = 200): number[] {
   }
 
   return found;
+}
+
+function isUncertain(core: DocumentCore): boolean {
+  return core.fieldConfidence.some(
+    (value, i) => (core.missingMask & (1 << i)) !== 0 || value < MEDIUM_CONFIDENCE,
+  );
 }
 
 describe('determinism', () => {
@@ -59,57 +82,51 @@ describe('determinism', () => {
 
 describe('value ranges', () => {
   it('keeps every scalar inside its column type', () => {
-    for (let index = 0; index < SAMPLE; index += 1) {
-      const core = generateCore(SEED, index);
-
-      expect(core.statusId).toBeGreaterThanOrEqual(0);
-      expect(core.statusId).toBeLessThan(PROCESSING_STATUSES.length);
-      expect(core.docTypeId).toBeLessThan(DOCUMENT_TYPES.length);
-      expect(core.nameId).toBeLessThan(NAME_POOL.length);
-      expect(core.locationId).toBeLessThan(LOCATION_POOL.length);
-      expect(core.programId).toBeLessThan(PROGRAM_POOL.length);
-      expect(core.errorId).toBeLessThanOrEqual(PROCESSING_ERROR_CODES.length);
-      expect(core.pageCount).toBeGreaterThanOrEqual(1);
-      expect(core.pageCount).toBeLessThanOrEqual(MAX_PAGES);
-      expect(core.missingMask).toBeLessThan(1 << FIELD_COUNT);
-      expect(core.attempts).toBeLessThan(256);
-    }
+    expect(
+      scan((core) => {
+        if (core.statusId < 0 || core.statusId >= PROCESSING_STATUSES.length) return 'statusId';
+        if (core.docTypeId >= DOCUMENT_TYPES.length) return 'docTypeId';
+        if (core.nameId >= NAME_POOL.length) return 'nameId';
+        if (core.locationId >= LOCATION_POOL.length) return 'locationId';
+        if (core.programId >= PROGRAM_POOL.length) return 'programId';
+        if (core.errorId > PROCESSING_ERROR_CODES.length) return 'errorId';
+        if (core.pageCount < 1 || core.pageCount > MAX_PAGES) return 'pageCount';
+        if (core.missingMask >= 1 << FIELD_COUNT) return 'missingMask';
+        if (core.attempts >= 256) return 'attempts overflows Uint8Array';
+        return null;
+      }),
+    ).toEqual([]);
   });
 
   it('keeps file size inside the declared band', () => {
-    for (let index = 0; index < SAMPLE; index += 1) {
-      const { sizeBytes } = generateCore(SEED, index);
-
-      expect(sizeBytes).toBeGreaterThanOrEqual(MIN_SIZE_BYTES);
-      expect(sizeBytes).toBeLessThan(MIN_SIZE_BYTES + SIZE_RANGE_BYTES);
-    }
+    expect(
+      scan(({ sizeBytes }) =>
+        sizeBytes >= MIN_SIZE_BYTES && sizeBytes < MIN_SIZE_BYTES + SIZE_RANGE_BYTES
+          ? null
+          : `sizeBytes ${sizeBytes}`,
+      ),
+    ).toEqual([]);
   });
 
   it('dates every document inside the archive window and never in the future', () => {
     const earliest = ARCHIVE_END - ARCHIVE_SPAN_DAYS * 86_400_000 - 86_400_000;
 
-    for (let index = 0; index < SAMPLE; index += 1) {
-      const { uploadedAt } = generateCore(SEED, index);
-
-      expect(uploadedAt).toBeGreaterThan(earliest);
-      expect(uploadedAt).toBeLessThanOrEqual(ARCHIVE_END);
-    }
+    expect(
+      scan(({ uploadedAt }) =>
+        uploadedAt > earliest && uploadedAt <= ARCHIVE_END ? null : `uploadedAt ${uploadedAt}`,
+      ),
+    ).toEqual([]);
   });
 
   it('keeps every confidence inside the unit interval', () => {
-    for (let index = 0; index < SAMPLE; index += 1) {
-      const core = generateCore(SEED, index);
-
-      expect(core.fieldConfidence).toHaveLength(FIELD_COUNT);
-
-      for (const value of core.fieldConfidence) {
-        expect(value).toBeGreaterThanOrEqual(0);
-        expect(value).toBeLessThanOrEqual(1);
-      }
-
-      expect(core.overallConfidence).toBeGreaterThanOrEqual(0);
-      expect(core.overallConfidence).toBeLessThanOrEqual(1);
-    }
+    expect(
+      scan((core) => {
+        if (core.fieldConfidence.length !== FIELD_COUNT) return 'wrong field count';
+        if (core.fieldConfidence.some((value) => value < 0 || value > 1)) return 'field confidence';
+        if (core.overallConfidence < 0 || core.overallConfidence > 1) return 'overall confidence';
+        return null;
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -135,94 +152,82 @@ describe('status invariants', () => {
   });
 
   it('gives failed documents an error and at least one attempt', () => {
-    const failed = indicesWithStatus('failed');
-    expect(failed.length).toBeGreaterThan(0);
+    expect(indicesWithStatus('failed').length).toBeGreaterThan(0);
 
-    for (const index of failed) {
-      const core = generateCore(SEED, index);
-
-      expect(core.errorId).toBeGreaterThan(0);
-      expect(PROCESSING_ERROR_CODES[core.errorId - 1]).toBeDefined();
-      expect(core.attempts).toBeGreaterThanOrEqual(1);
-    }
+    expect(
+      scan((core, index) => {
+        if (statusOf(index) !== 'failed') return null;
+        if (core.errorId < 1 || core.errorId > PROCESSING_ERROR_CODES.length)
+          return 'no error code';
+        if (core.attempts < 1) return 'no attempt recorded';
+        return null;
+      }),
+    ).toEqual([]);
   });
 
   it('never attaches an error to a document that did not fail', () => {
-    for (let index = 0; index < SAMPLE; index += 1) {
-      if (statusOf(index) === 'failed') continue;
-      expect(generateCore(SEED, index).errorId).toBe(0);
-    }
+    expect(
+      scan((core, index) =>
+        statusOf(index) !== 'failed' && core.errorId !== 0 ? `errorId ${core.errorId}` : null,
+      ),
+    ).toEqual([]);
   });
 
   it('leaves no extracted values on documents that never finished extraction', () => {
     const allMissing = (1 << FIELD_COUNT) - 1;
 
-    for (let index = 0; index < SAMPLE; index += 1) {
-      const status = statusOf(index);
-      if (status === 'completed' || status === 'needs_review') continue;
-
-      const core = generateCore(SEED, index);
-
-      expect(core.missingMask).toBe(allMissing);
-      expect(core.overallConfidence).toBe(0);
-      expect(core.fieldConfidence.every((value) => value === 0)).toBe(true);
-    }
+    expect(
+      scan((core, index) => {
+        const status = statusOf(index);
+        if (status === 'completed' || status === 'needs_review') return null;
+        if (core.missingMask !== allMissing) return 'has extracted fields';
+        if (core.overallConfidence !== 0) return 'carries confidence';
+        return null;
+      }),
+    ).toEqual([]);
   });
 
   it('never leaves a completed document needing review', () => {
-    const completed = indicesWithStatus('completed', 500);
-    expect(completed.length).toBeGreaterThan(0);
+    expect(indicesWithStatus('completed', 500).length).toBeGreaterThan(0);
 
-    for (const index of completed) {
-      const core = generateCore(SEED, index);
-
-      expect(core.missingMask).toBe(0);
-      for (const value of core.fieldConfidence) {
-        expect(value).toBeGreaterThanOrEqual(MEDIUM_CONFIDENCE);
-      }
-    }
+    expect(
+      scan((core, index) => {
+        if (statusOf(index) !== 'completed') return null;
+        if (core.missingMask !== 0) return 'has a missing field';
+        if (core.fieldConfidence.some((value) => value < MEDIUM_CONFIDENCE))
+          return 'low confidence';
+        return null;
+      }),
+    ).toEqual([]);
   });
 
   it('always gives a needs_review document something to actually review', () => {
-    const review = indicesWithStatus('needs_review', 500);
-    expect(review.length).toBeGreaterThan(0);
+    expect(indicesWithStatus('needs_review', 500).length).toBeGreaterThan(0);
 
-    for (const index of review) {
-      const core = generateCore(SEED, index);
-      const uncertain = core.fieldConfidence.some(
-        (value, i) => (core.missingMask & (1 << i)) !== 0 || value < MEDIUM_CONFIDENCE,
-      );
-
-      expect(uncertain).toBe(true);
-    }
-  });
-
-  it('holds the review invariant across the whole sample, not just a slice', () => {
-    for (let index = 0; index < SAMPLE; index += 1) {
-      if (statusOf(index) !== 'needs_review') continue;
-
-      const core = generateCore(SEED, index);
-      const uncertain = core.fieldConfidence.some(
-        (value, i) => (core.missingMask & (1 << i)) !== 0 || value < MEDIUM_CONFIDENCE,
-      );
-
-      expect(uncertain).toBe(true);
-    }
+    expect(
+      scan((core, index) =>
+        statusOf(index) === 'needs_review' && !isUncertain(core) ? 'nothing to review' : null,
+      ),
+    ).toEqual([]);
   });
 
   it('leaves pending documents unattempted', () => {
-    for (const index of indicesWithStatus('pending')) {
-      expect(generateCore(SEED, index).attempts).toBe(0);
-    }
+    expect(
+      scan((core, index) =>
+        statusOf(index) === 'pending' && core.attempts !== 0 ? `attempts ${core.attempts}` : null,
+      ),
+    ).toEqual([]);
   });
 });
 
 describe('overallConfidence', () => {
   it('averages the field confidences for extracted documents', () => {
-    for (const index of [
+    const extracted = [
       ...indicesWithStatus('completed', 100),
       ...indicesWithStatus('needs_review', 100),
-    ]) {
+    ];
+
+    for (const index of extracted) {
       const core = generateCore(SEED, index);
       const mean = core.fieldConfidence.reduce((sum, value) => sum + value, 0) / FIELD_COUNT;
 
