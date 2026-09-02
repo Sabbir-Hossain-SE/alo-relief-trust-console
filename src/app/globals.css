@@ -1,0 +1,33 @@
+/*
+ * Layer order matters. Emotion injects MUI's styles into `mui` (see
+ * AppRouterCacheProvider's enableCssLayer). Declaring `mui` first means Tailwind
+ * utilities win where they overlap, which is what the ownership split expects:
+ * MUI owns components, Tailwind owns layout.
+ *
+ * Tailwind's preflight is deliberately not imported — MUI's CssBaseline owns
+ * the reset, and running both would reset twice.
+ */
+@layer mui, tw-theme, tw-utilities;
+
+@import 'tailwindcss/theme.css' layer(tw-theme);
+@import 'tailwindcss/utilities.css' layer(tw-utilities);
+
+@source "../";
+
+html,
+body {
+  height: 100%;
+}
+
+/* A keyboard-only escape hatch past the navigation. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+}
+
+.skip-link:focus {
+  left: 0;
+}
