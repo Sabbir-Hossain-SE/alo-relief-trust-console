@@ -1,25 +1,9 @@
 /** @type {import('@commitlint/types').UserConfig} */
 const config = {
-  extends: ['@commitlint/config-conventional'],
   rules: {
-    'scope-enum': [
-      2,
-      'always',
-      [
-        'setup',
-        'design-system',
-        'domain',
-        'data-layer',
-        'upload',
-        'documents',
-        'batches',
-        'review',
-        'a11y',
-        'testing',
-        'docs',
-      ],
-    ],
-    'subject-case': [2, 'always', 'lower-case'],
+    // Require a non-empty commit message. No type/scope convention enforced —
+    // any plain sentence is accepted.
+    'header-min-length': [2, 'always', 1],
     'header-max-length': [2, 'always', 100],
   },
 };
