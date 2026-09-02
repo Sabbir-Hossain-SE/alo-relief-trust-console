@@ -1,16 +1,18 @@
 import { createTheme } from '@mui/material/styles';
 import type { ProcessingStatus } from '@/domain/status';
-import { brand, fontStacks, motion, radii, statusColors, surfaces } from './tokens';
+import { brand, fontStacks, motion, radii, statusTones, surfaces, type StatusTone } from './tokens';
 
 declare module '@mui/material/styles' {
   interface Palette {
-    status: Record<ProcessingStatus, string>;
+    status: Record<ProcessingStatus, StatusTone>;
     accent: string;
+    accentInk: string;
     hairline: string;
   }
   interface PaletteOptions {
-    status?: Record<ProcessingStatus, string>;
+    status?: Record<ProcessingStatus, StatusTone>;
     accent?: string;
+    accentInk?: string;
     hairline?: string;
   }
 }
@@ -23,7 +25,8 @@ export const theme = createTheme({
         mode: 'light',
         primary: { main: brand.primary.light },
         accent: brand.accent.light,
-        status: statusColors,
+        accentInk: brand.accentInk.light,
+        status: statusTones.light,
         hairline: surfaces.light.hairline,
         background: { default: surfaces.light.ground, paper: surfaces.light.surface },
         text: { primary: surfaces.light.text, secondary: surfaces.light.textMuted },
@@ -35,7 +38,8 @@ export const theme = createTheme({
         mode: 'dark',
         primary: { main: brand.primary.dark },
         accent: brand.accent.dark,
-        status: statusColors,
+        accentInk: brand.accentInk.dark,
+        status: statusTones.dark,
         hairline: surfaces.dark.hairline,
         background: { default: surfaces.dark.ground, paper: surfaces.dark.surface },
         text: { primary: surfaces.dark.text, secondary: surfaces.dark.textMuted },
@@ -64,18 +68,6 @@ export const theme = createTheme({
   },
 
   components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        // Numbers in tables must not jitter as they tick up.
-        '.tabular': { fontFamily: fontStacks.mono, fontVariantNumeric: 'tabular-nums' },
-        '@media (prefers-reduced-motion: reduce)': {
-          '*, *::before, *::after': {
-            animationDuration: '0.01ms !important',
-            transitionDuration: '0.01ms !important',
-          },
-        },
-      },
-    },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: { root: { borderRadius: radii.chip } },
