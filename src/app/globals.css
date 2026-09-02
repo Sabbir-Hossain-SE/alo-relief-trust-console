@@ -6,8 +6,12 @@
  *
  * Tailwind's preflight is deliberately not imported — MUI's CssBaseline owns
  * the reset, and running both would reset twice.
+ *
+ * App-level rules live in their own layer between the two. Inside `mui` they
+ * lost: a global `.tabular` and MUI's component classes both weigh 0-1-0, and
+ * the component styles are injected later, so they won on source order alone.
  */
-@layer mui, tw-theme, tw-utilities;
+@layer mui, app, tw-theme, tw-utilities;
 
 @import 'tailwindcss/theme.css' layer(tw-theme);
 @import 'tailwindcss/utilities.css' layer(tw-utilities);
@@ -30,4 +34,34 @@ body {
 
 .skip-link:focus {
   left: 0;
+}
+
+@layer app {
+  /* Identifiers, filenames and table cells: mono, evenly spaced. */
+  .tabular {
+    font-family: var(--font-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Display figures keep their typeface but stop shifting as they tick up. */
+  .figures {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* MUI styles focus on some components and clears it on others. This makes the
+     ring unconditional, so nothing is reachable without being visible. */
+  :focus-visible {
+    outline: 2px solid var(--mui-palette-primary-main);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }

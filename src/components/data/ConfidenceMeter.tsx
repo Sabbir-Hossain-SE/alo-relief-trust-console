@@ -4,18 +4,8 @@ import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import {
-  CONFIDENCE_BAND_LABELS,
-  confidenceBand,
-  formatConfidence,
-  type ConfidenceBand,
-} from '@/domain/confidence';
-
-const BAND_COLORS: Record<ConfidenceBand, string> = {
-  high: '#5C8A6E',
-  medium: '#D99A4E',
-  low: '#C4685A',
-};
+import { CONFIDENCE_BAND_LABELS, confidenceBand, formatConfidence } from '@/domain/confidence';
+import { CONFIDENCE_BAND_STATUS } from '@/theme/tokens';
 
 type ConfidenceMeterProps = {
   score: number;
@@ -25,7 +15,7 @@ type ConfidenceMeterProps = {
 // Shows how much to trust an extracted value, as a bar plus a readable percentage.
 export function ConfidenceMeter({ score, showLabel = true }: ConfidenceMeterProps) {
   const band = confidenceBand(score);
-  const color = BAND_COLORS[band];
+  const status = CONFIDENCE_BAND_STATUS[band];
   const label = `${CONFIDENCE_BAND_LABELS[band]}, ${formatConfidence(score)}`;
 
   return (
@@ -33,15 +23,22 @@ export function ConfidenceMeter({ score, showLabel = true }: ConfidenceMeterProp
       <Box className="flex items-center gap-2" role="img" aria-label={label}>
         <Box
           className="h-1.5 w-14 overflow-hidden rounded-full"
-          sx={{ backgroundColor: alpha(color, 0.2) }}
+          sx={(theme) => ({ backgroundColor: alpha(theme.palette.status[status].fill, 0.2) })}
         >
           <Box
             className="h-full rounded-full"
-            sx={{ width: `${Math.round(score * 100)}%`, backgroundColor: color }}
+            sx={(theme) => ({
+              width: `${Math.round(score * 100)}%`,
+              backgroundColor: theme.palette.status[status].ink,
+            })}
           />
         </Box>
         {showLabel ? (
-          <Typography variant="caption" className="tabular" sx={{ color }}>
+          <Typography
+            variant="caption"
+            className="tabular"
+            sx={(theme) => ({ color: theme.palette.status[status].ink })}
+          >
             {formatConfidence(score)}
           </Typography>
         ) : null}
