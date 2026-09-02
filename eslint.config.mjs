@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     'test-results/**',
     'next-env.d.ts',
     'src/server/corpus/pools.generated.ts',
+    'public/mockServiceWorker.js',
   ]),
 
   ...nextVitals,

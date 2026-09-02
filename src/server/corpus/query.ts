@@ -25,6 +25,8 @@ export type DocumentQuery = {
   search?: string;
   /** Restricts to documents an operator has to act on. */
   needsAttention?: boolean;
+  /** Restricts to one upload, so a batch can link into its own failures. */
+  batchId?: string;
   sortField?: SortField;
   sortDirection?: SortDirection;
   page?: number;
@@ -91,6 +93,10 @@ export function filterIndices(
   const search = isSearchable(query.search) ? resolveSearch(query.search) : null;
   const hasOverlay = overlay.size > 0;
 
+  // Only uploaded documents carry a batch id, so a batch filter can never match
+  // anything in the generated archive.
+  if (query.batchId !== undefined && !hasOverlay) return new Uint32Array(0);
+
   const matched = new Uint32Array(store.size);
   let count = 0;
 
@@ -100,6 +106,7 @@ export function filterIndices(
       ? PROCESSING_STATUSES.indexOf(patch.status)
       : (store.statusId[index] as number);
 
+    if (query.batchId !== undefined && patch?.batchId !== query.batchId) continue;
     if (statuses && statuses[statusId] !== 1) continue;
     if (types && types[store.docTypeId[index] as number] !== 1) continue;
 

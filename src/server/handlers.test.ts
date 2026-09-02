@@ -1,0 +1,365 @@
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { DocumentDetail, DocumentSummary } from '@/domain/document';
+import { isRetryable } from '@/domain/errors';
+import type { ApiError, ArchiveSummary, RetryResult } from './api-contract';
+import { resetDatabase } from './db';
+import { server } from './node';
+import type { BatchSummary } from './simulator/batch';
+import type { QueryResult } from './corpus/query';
+
+const BASE = 'http://localhost/api';
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+/**
+ * A small archive with no artificial latency and a fast simulator. Latency and
+ * service time are demo affordances, not part of the contract — leaving them in
+ * would mean waiting out the demo pacing on every assertion.
+ */
+beforeEach(() =>
+  resetDatabase({
+    size: 400,
+    latency: { read: 0, write: 0 },
+    config: { concurrency: 40, serviceTimeMs: 5 },
+  }),
+);
+
+async function get<T>(path: string): Promise<{ status: number; body: T }> {
+  const response = await fetch(`${BASE}${path}`);
+  return { status: response.status, body: (await response.json()) as T };
+}
+
+async function send<T>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: T }> {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  return { status: response.status, body: (await response.json()) as T };
+}
+
+// Polls the batch endpoint the way the client will, until it settles.
+async function drainBatch(id: string, maxPolls = 200): Promise<BatchSummary> {
+  for (let poll = 0; poll < maxPolls; poll += 1) {
+    const { body } = await get<BatchSummary>(`/batches/${id}`);
+    if (body.settled) return body;
+  }
+
+  throw new Error('Batch never settled');
+}
+
+describe('GET /summary', () => {
+  it('reports the archive size and a full status breakdown', async () => {
+    const { status, body } = await get<ArchiveSummary>('/summary');
+
+    expect(status).toBe(200);
+    expect(body.total).toBe(400);
+    expect(Object.values(body.byStatus).reduce((sum, value) => sum + value, 0)).toBe(400);
+  });
+});
+
+describe('GET /documents', () => {
+  it('returns a page with paging metadata', async () => {
+    const { status, body } = await get<QueryResult>('/documents?pageSize=25');
+
+    expect(status).toBe(200);
+    expect(body.rows).toHaveLength(25);
+    expect(body.total).toBe(400);
+    expect(body.pageCount).toBe(16);
+  });
+
+  it('applies filters from the query string', async () => {
+    const { body } = await get<QueryResult>('/documents?status=failed&pageSize=50');
+
+    expect(body.rows.length).toBeGreaterThan(0);
+    for (const row of body.rows) expect(row.status).toBe('failed');
+  });
+
+  it('accepts repeated parameters as a union', async () => {
+    const { body } = await get<QueryResult>('/documents?status=failed&status=needs_review');
+    const failed = await get<QueryResult>('/documents?status=failed');
+    const review = await get<QueryResult>('/documents?status=needs_review');
+
+    expect(body.total).toBe(failed.body.total + review.body.total);
+  });
+
+  it('sorts as asked', async () => {
+    const { body } = await get<QueryResult>('/documents?sort=uploadedAt&dir=asc&pageSize=20');
+
+    for (let i = 1; i < body.rows.length; i += 1) {
+      const previous = body.rows[i - 1] as DocumentSummary;
+      expect((body.rows[i] as DocumentSummary).uploadedAt).toBeGreaterThanOrEqual(
+        previous.uploadedAt,
+      );
+    }
+  });
+
+  it('ignores malformed parameters rather than failing the request', async () => {
+    const { status, body } = await get<QueryResult>(
+      '/documents?status=banana&sort=nonsense&page=-4&pageSize=abc',
+    );
+
+    expect(status).toBe(200);
+    expect(body.total).toBe(400);
+  });
+});
+
+describe('GET /documents/:id', () => {
+  it('returns the full record', async () => {
+    const { status, body } = await get<DocumentDetail>('/documents/ARC-000012');
+
+    expect(status).toBe(200);
+    expect(body.id).toBe('ARC-000012');
+    expect(body.fields.personName).toBeDefined();
+    expect(body.corrections).toEqual([]);
+  });
+
+  it('is a 404 for an index beyond the archive', async () => {
+    const { status, body } = await get<ApiError>('/documents/ARC-999999');
+
+    expect(status).toBe(404);
+    expect(body.code).toBe('not_found');
+  });
+
+  it('is a 404 for an identifier that is not ours', async () => {
+    expect((await get<ApiError>('/documents/not-an-id')).status).toBe(404);
+  });
+});
+
+describe('PATCH /documents/:id', () => {
+  async function findNeedsReview(): Promise<DocumentSummary> {
+    const { body } = await get<QueryResult>('/documents?status=needs_review&pageSize=1');
+    const row = body.rows[0];
+    if (!row) throw new Error('No document needs review');
+    return row;
+  }
+
+  it('records the corrected value as operator-sourced', async () => {
+    const target = await findNeedsReview();
+    const { status, body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
+      field: 'personName',
+      value: 'Corrected Name',
+    });
+
+    expect(status).toBe(200);
+    expect(body.fields.personName.value).toBe('Corrected Name');
+    expect(body.fields.personName.source).toBe('manual');
+    expect(body.fields.personName.confidence).toBe(1);
+  });
+
+  it('appends to the audit trail', async () => {
+    const target = await findNeedsReview();
+    await send('PATCH', `/documents/${target.id}`, { field: 'personName', value: 'One' });
+    const { body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
+      field: 'phone',
+      value: '+8801700000000',
+    });
+
+    expect(body.corrections).toHaveLength(2);
+    expect(body.corrections[0]?.field).toBe('personName');
+  });
+
+  it('persists across a subsequent read', async () => {
+    const target = await findNeedsReview();
+    await send('PATCH', `/documents/${target.id}`, { field: 'location', value: 'Dhaka' });
+
+    const { body } = await get<DocumentDetail>(`/documents/${target.id}`);
+    expect(body.fields.location.value).toBe('Dhaka');
+  });
+
+  it('rejects an unknown field', async () => {
+    const target = await findNeedsReview();
+    const { status, body } = await send<ApiError>('PATCH', `/documents/${target.id}`, {
+      field: 'notAField',
+      value: 'x',
+    });
+
+    expect(status).toBe(400);
+    expect(body.code).toBe('invalid_request');
+  });
+
+  it('is a 404 for a document that does not exist', async () => {
+    const { status } = await send('PATCH', '/documents/ARC-999999', {
+      field: 'personName',
+      value: 'x',
+    });
+
+    expect(status).toBe(404);
+  });
+});
+
+describe('POST /batches', () => {
+  it('creates a batch with everything queued', async () => {
+    const { status, body } = await send<BatchSummary>('POST', '/batches', {
+      label: 'Field intake',
+      fileCount: 40,
+    });
+
+    expect(status).toBe(201);
+    expect(body.total).toBe(40);
+    expect(body.counts.pending).toBe(40);
+    expect(body.settled).toBe(false);
+  });
+
+  it('grows the archive by the number of files', async () => {
+    await send('POST', '/batches', { label: 'Intake', fileCount: 30 });
+
+    expect((await get<ArchiveSummary>('/summary')).body.total).toBe(430);
+  });
+
+  it('rejects a batch with no files', async () => {
+    const { status, body } = await send<ApiError>('POST', '/batches', {
+      label: 'Empty',
+      fileCount: 0,
+    });
+
+    expect(status).toBe(400);
+    expect(body.code).toBe('invalid_request');
+    expect(body.remedy).toBeDefined();
+  });
+
+  it('rejects a batch with no label', async () => {
+    expect((await send('POST', '/batches', { label: '', fileCount: 5 })).status).toBe(400);
+  });
+
+  it('reports when the archive has no room left', async () => {
+    const { status, body } = await send<ApiError>('POST', '/batches', {
+      label: 'Too many',
+      fileCount: 50_000,
+    });
+
+    expect(status).toBe(507);
+    expect(body.remedy).toBeDefined();
+  });
+});
+
+describe('batch progression', () => {
+  it('advances as the client polls and settles', async () => {
+    const created = await send<BatchSummary>('POST', '/batches', {
+      label: 'Intake',
+      fileCount: 30,
+    });
+
+    const settled = await drainBatch(created.body.id);
+
+    expect(settled.counts.pending + settled.counts.processing).toBe(0);
+    expect(Object.values(settled.counts).reduce((sum, value) => sum + value, 0)).toBe(30);
+  });
+
+  it('lands in more than one final state', async () => {
+    const created = await send<BatchSummary>('POST', '/batches', {
+      label: 'Large intake',
+      fileCount: 300,
+    });
+
+    const settled = await drainBatch(created.body.id);
+
+    expect(settled.counts.completed).toBeGreaterThan(0);
+    expect(settled.counts.failed + settled.counts.needs_review).toBeGreaterThan(0);
+  });
+
+  it('lists batches newest first', async () => {
+    await send('POST', '/batches', { label: 'First', fileCount: 5 });
+    await send('POST', '/batches', { label: 'Second', fileCount: 5 });
+
+    const { body } = await get<BatchSummary[]>('/batches');
+
+    expect(body).toHaveLength(2);
+    expect(body[0]?.createdAt).toBeGreaterThanOrEqual(body[1]?.createdAt ?? 0);
+  });
+
+  it('is a 404 for an unknown batch', async () => {
+    expect((await get<ApiError>('/batches/batch-999')).status).toBe(404);
+  });
+});
+
+describe('retry', () => {
+  async function settledBatchWithFailures(): Promise<{ id: string; failed: DocumentSummary[] }> {
+    const created = await send<BatchSummary>('POST', '/batches', {
+      label: 'Intake',
+      fileCount: 300,
+    });
+    await drainBatch(created.body.id);
+
+    // Scoped to the batch: the generated archive has its own failures, and a
+    // batch retry must only account for its own.
+    const { body } = await get<QueryResult>(
+      `/documents?status=failed&batch=${created.body.id}&pageSize=200`,
+    );
+    return { id: created.body.id, failed: body.rows };
+  }
+
+  it('retries a failed document', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && isRetryable(row.errorCode));
+    expect(target).toBeDefined();
+
+    const { status, body } = await send<RetryResult>('POST', `/documents/${target?.id}/retry`);
+
+    expect(status).toBe(200);
+    expect(body.retried).toBe(1);
+  });
+
+  it('refuses to retry a failure a retry cannot fix', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && !isRetryable(row.errorCode));
+    expect(target).toBeDefined();
+
+    const { status, body } = await send<ApiError>('POST', `/documents/${target?.id}/retry`);
+
+    expect(status).toBe(409);
+    expect(body.code).toBe('not_retryable');
+    // The point of refusing: say what to do instead.
+    expect(body.remedy).toBeDefined();
+  });
+
+  it('refuses to retry a document that has not failed', async () => {
+    const { body } = await get<QueryResult>('/documents?status=completed&pageSize=1');
+    const { status } = await send<ApiError>('POST', `/documents/${body.rows[0]?.id}/retry`);
+
+    expect(status).toBe(409);
+  });
+
+  it('retries a whole batch and reports what it skipped', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const terminal = failed.filter((row) => row.errorCode && !isRetryable(row.errorCode)).length;
+
+    const { status, body } = await send<RetryResult>('POST', `/batches/${id}/retry`, {});
+
+    expect(status).toBe(200);
+    expect(body.retried).toBeGreaterThan(0);
+    expect(body.skipped).toBe(terminal);
+  });
+
+  it('clears failures that a second attempt resolves', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const before = failed.length;
+
+    await send('POST', `/batches/${id}/retry`, {});
+    await drainBatch(id);
+
+    const after = (await get<QueryResult>(`/documents?status=failed&batch=${id}&pageSize=200`)).body
+      .total;
+    expect(after).toBeLessThan(before);
+  });
+
+  it('scopes a batch view to that batch alone', async () => {
+    const { id } = await settledBatchWithFailures();
+    const { body } = await get<QueryResult>(`/documents?batch=${id}&pageSize=1`);
+    const everything = await get<QueryResult>('/documents?pageSize=1');
+
+    expect(body.total).toBe(300);
+    expect(everything.body.total).toBeGreaterThan(body.total);
+  });
+
+  it('returns nothing for a batch that has no documents', async () => {
+    expect((await get<QueryResult>('/documents?batch=batch-999')).body.total).toBe(0);
+  });
+});
