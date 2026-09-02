@@ -23,19 +23,21 @@ export function StatCard({ status, count, total }: StatCardProps) {
         {STATUS_LABELS[status]}
       </Typography>
 
-      <Typography variant="h2" component="p" className="tabular">
+      <Typography variant="h2" component="p" className="figures">
         {formatCount(count)}
       </Typography>
 
       <Box
         className="h-1 w-full overflow-hidden rounded-full"
-        sx={(theme) => ({ backgroundColor: alpha(theme.palette.status[status], 0.16) })}
+        sx={(theme) => ({ backgroundColor: alpha(theme.palette.status[status].fill, 0.2) })}
       >
         <Box
           className="h-full rounded-full"
           sx={(theme) => ({
             width: `${Math.round(share * 100)}%`,
-            backgroundColor: theme.palette.status[status],
+            // The bar reports a proportion, so it has to clear the contrast
+            // threshold for meaningful graphics. Ink does; the tint does not.
+            backgroundColor: theme.palette.status[status].ink,
           })}
         />
       </Box>

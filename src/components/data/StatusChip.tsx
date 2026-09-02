@@ -33,9 +33,10 @@ export function StatusChip({ status, size = 'small' }: StatusChipProps) {
       icon={<Icon fontSize="small" />}
       label={STATUS_LABELS[status]}
       sx={(theme) => ({
-        color: theme.palette.status[status],
-        backgroundColor: alpha(theme.palette.status[status], 0.12),
-        border: `1px solid ${alpha(theme.palette.status[status], 0.24)}`,
+        // Ink carries the text, fill only tints behind it.
+        color: theme.palette.status[status].ink,
+        backgroundColor: alpha(theme.palette.status[status].fill, 0.12),
+        border: `1px solid ${alpha(theme.palette.status[status].fill, 0.32)}`,
         '& .MuiChip-icon': { color: 'inherit' },
       })}
     />
