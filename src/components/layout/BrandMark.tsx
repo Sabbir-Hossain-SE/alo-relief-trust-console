@@ -3,8 +3,13 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
+type BrandMarkProps = {
+  /** Drops the second line, for the bar where there is one line of room. */
+  compact?: boolean;
+};
+
 // The trust's name beside a small sun, since "Alo" means light.
-export function BrandMark() {
+export function BrandMark({ compact = false }: BrandMarkProps) {
   return (
     <Box className="flex items-center gap-2.5">
       <Box
@@ -33,9 +38,11 @@ export function BrandMark() {
         <Typography variant="h3" component="span" className="block" sx={{ fontSize: '1rem' }}>
           Alo Relief Trust
         </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          Document console
-        </Typography>
+        {compact ? null : (
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Document console
+          </Typography>
+        )}
       </Box>
     </Box>
   );
