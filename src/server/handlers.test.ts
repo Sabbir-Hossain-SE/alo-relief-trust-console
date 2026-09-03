@@ -1,7 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentDetail, DocumentSummary } from '@/domain/document';
 import { isRetryable } from '@/domain/errors';
-import type { ApiError, ArchiveSummary, ManualEntryResult, RetryResult } from './api-contract';
+import type {
+  ApiError,
+  ArchiveAnalytics,
+  ArchiveSummary,
+  ManualEntryResult,
+  RetryResult,
+} from './api-contract';
 import { resetDatabase } from './db';
 import { server } from './node';
 import type { BatchSummary } from './simulator/batch';
@@ -566,5 +572,35 @@ describe('retry', () => {
 
   it('returns nothing for a batch that has no documents', async () => {
     expect((await get<QueryResult>('/documents?batch=batch-999')).body.total).toBe(0);
+  });
+});
+
+describe('GET /analytics', () => {
+  it('breaks the archive down without losing a document', async () => {
+    const { status, body } = await get<ArchiveAnalytics>('/analytics');
+    const sum = (counts: Record<string, number>) =>
+      Object.values(counts).reduce((total, count) => total + count, 0);
+
+    expect(status).toBe(200);
+    expect(body.total).toBe(400);
+    expect(sum(body.byStatus)).toBe(400);
+    expect(sum(body.byType)).toBe(400);
+  });
+
+  // Two figures for the same archive on the same screen must not disagree.
+  it('agrees with the summary endpoint', async () => {
+    const summary = await get<ArchiveSummary>('/summary');
+    const analytics = await get<ArchiveAnalytics>('/analytics');
+
+    expect(analytics.body.byStatus).toEqual(summary.body.byStatus);
+    expect(analytics.body.total).toBe(summary.body.total);
+  });
+
+  it('reports confidence over extracted documents only', async () => {
+    const { body } = await get<ArchiveAnalytics>('/analytics');
+
+    expect(body.extracted).toBe(body.byStatus.completed + body.byStatus.needs_review);
+    expect(body.averageConfidence).toBeGreaterThan(0);
+    expect(body.averageConfidence).toBeLessThanOrEqual(1);
   });
 });

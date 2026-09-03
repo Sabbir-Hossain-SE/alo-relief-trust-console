@@ -82,6 +82,8 @@ export type ArchiveSummary = {
   byStatus: Record<(typeof PROCESSING_STATUSES)[number], number>;
 };
 
+export type { ArchiveAnalytics } from './corpus/analytics';
+
 export type ManualEntryResult = {
   moved: number;
   /** Failures left alone because a retry could still clear them. */

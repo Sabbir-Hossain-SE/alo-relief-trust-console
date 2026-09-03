@@ -1,4 +1,4 @@
-import { HIGH_CONFIDENCE, MEDIUM_CONFIDENCE, type ConfidenceBand } from '@/domain/confidence';
+import { confidenceBand, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentSummary, type DocumentType } from '@/domain/document';
 import type { ProcessingErrorCode } from '@/domain/errors';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
@@ -72,12 +72,6 @@ function typeMask(types: readonly DocumentType[] | undefined): Uint8Array | null
   return mask;
 }
 
-function bandOf(confidence: number): ConfidenceBand {
-  if (confidence >= HIGH_CONFIDENCE) return 'high';
-  if (confidence >= MEDIUM_CONFIDENCE) return 'medium';
-  return 'low';
-}
-
 /**
  * Walks the archive once and collects matching row indices.
  *
@@ -130,7 +124,7 @@ export function filterIndices(
       if (code === undefined || !causes.has(code)) continue;
     }
 
-    if (bands && !bands.has(bandOf(store.confidence[index] as number))) continue;
+    if (bands && !bands.has(confidenceBand(store.confidence[index] as number))) continue;
 
     if (search) {
       const matchesName = search.nameIds.has(store.nameId[index] as number);

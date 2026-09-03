@@ -3,6 +3,7 @@ import type { DocumentDetail } from '@/domain/document';
 import {
   API_BASE,
   toSearchParams,
+  type ArchiveAnalytics,
   type ArchiveSummary,
   type CorrectionsInput,
   type CreateBatchInput,
@@ -36,6 +37,13 @@ export const api = createApi({
   endpoints: (build) => ({
     getSummary: build.query<ArchiveSummary, void>({
       query: () => '/summary',
+      providesTags: ['Summary'],
+    }),
+
+    getAnalytics: build.query<ArchiveAnalytics, void>({
+      query: () => '/analytics',
+      // Same tag as the counts: anything that moves a document moves a
+      // breakdown of documents.
       providesTags: ['Summary'],
     }),
 
@@ -122,6 +130,7 @@ export const api = createApi({
 
 export const {
   useGetSummaryQuery,
+  useGetAnalyticsQuery,
   useGetDocumentsQuery,
   useGetDocumentQuery,
   useCorrectDocumentMutation,

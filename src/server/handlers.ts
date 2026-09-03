@@ -8,10 +8,12 @@ import {
   fromSearchParams,
   retryBatchSchema,
   type ApiError,
+  type ArchiveAnalytics,
   type ArchiveSummary,
   type ManualEntryResult,
   type RetryResult,
 } from './api-contract';
+import { analyzeArchive } from './corpus/analytics';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
 import { countByStatus, queryDocuments } from './corpus/query';
 import {
@@ -65,6 +67,15 @@ export const handlers = [
     };
 
     return HttpResponse.json(summary);
+  }),
+
+  http.get(`${ROUTE}/analytics`, async () => {
+    const db = getDatabase();
+    await delay(db.latency.read);
+
+    advanceAll(db);
+
+    return HttpResponse.json(analyzeArchive(db.store, db.overlay) satisfies ArchiveAnalytics);
   }),
 
   http.get(`${ROUTE}/documents`, async ({ request }) => {
