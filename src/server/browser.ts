@@ -14,15 +14,23 @@ let started: Promise<void> | null = null;
  */
 export function startMockApi(): Promise<void> {
   started ??= (async () => {
-    const [{ setupWorker }, { handlers }] = await Promise.all([
+    const [{ setupWorker }, { handlers }, { API_BASE }] = await Promise.all([
       import('msw/browser'),
       import('./handlers'),
+      import('./api-contract'),
     ]);
 
     await setupWorker(...handlers).start({
-      // The app is entirely mock-backed, so anything unhandled is a real bug
-      // worth seeing rather than something to pass through silently.
-      onUnhandledRequest: 'warn',
+      /**
+       * The worker sees every request the page makes, not only ours: Next.js
+       * fetches RSC payloads on each client-side navigation and prefetch, plus
+       * the favicon and its own assets. Warning about those buries the one
+       * warning worth reading, so only an unhandled call to the mock API — which
+       * really would be a missing handler — is reported.
+       */
+      onUnhandledRequest(request, print) {
+        if (new URL(request.url).pathname.startsWith(API_BASE)) print.warning();
+      },
       serviceWorker: { url: '/mockServiceWorker.js' },
       quiet: true,
     });
