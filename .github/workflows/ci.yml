@@ -38,7 +38,41 @@ jobs:
         run: pnpm format:check
 
       - name: Unit tests
-        run: pnpm test
+        run: pnpm test:coverage
 
       - name: Build
         run: pnpm build
+
+  e2e:
+    name: End-to-end flows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Only Chromium: the suite proves the flows work, and running three
+      # engines against one mock backend triples the time to say the same thing.
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Playwright builds and starts the app itself, so this is one step.
+      - name: Run flows
+        run: pnpm e2e
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

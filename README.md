@@ -21,7 +21,10 @@ Built and verified on Node 22.15 and pnpm 9.15 (`.nvmrc` pins the major). No env
 100,000 documents is generated in the browser on first load.
 
 ```bash
-pnpm test           # 434 unit and component tests, including axe checks
+pnpm test           # 474 unit and component tests, including axe checks
+pnpm test:coverage  # the same, with coverage thresholds enforced
+pnpm e2e            # 7 Playwright flows against a production build
+                    # first run: pnpm exec playwright install chromium
 pnpm bench          # the performance numbers quoted below
 pnpm typecheck      # next typegen && tsc --noEmit
 pnpm lint
@@ -270,13 +273,32 @@ Verified by keyboard and by reading the accessibility tree, not asserted:
 
 ## Testing
 
-**434 tests across 29 files.** Coverage of `domain/`, `lib/` and `server/` is **89% of
-statements**, and axe-core runs over the interactive components on every `pnpm test`.
+**474 unit and component tests across 33 files, and 7 Playwright flows.** Coverage of
+`domain/`, `lib/` and `server/` is **96% of statements**, and axe-core runs over the
+interactive components on every `pnpm test`.
 
 The weight is deliberately on the framework-free core — the state machine, the query engine,
 the discrete-event simulator, the upload queue's concurrency, backoff, pause and cancel — and
 on the seams where things actually broke. Component tests cover the correction form's keyboard
 traverse and error wiring.
+
+Coverage is a threshold rather than a number in a report: `domain/` is held at 100% and `lib/`
+at 96%, so CI fails if either slips. The two service-worker boot files are excluded from it,
+because `setupWorker` throws outside a browser and there is nothing jsdom can honestly assert
+about them — Playwright cannot reach a single screen until they have run.
+
+`pnpm e2e` drives the three flows the product exists for, against a production build rather
+than the dev server, because registering a service worker is precisely the thing worth proving
+in the artefact that ships:
+
+| Flow                     | What it proves                                                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upload → batch           | A selection is indexed, uploaded through the retrying queue, and the batch is followed to a settled four-way split that accounts for every document. |
+| Browse → filter → record | The archive narrows, a record opens in a modal drawer, and the whole view — filters and open document — survives being pasted into another browser.  |
+| Review → correct         | An uncertain record is edited, saved, and comes back with an audit trail; the queue is reachable and operable from the keyboard alone.               |
+
+Each flow also asserts the browser console stayed clean, with one documented exception: the
+mock backend rejects a share of uploads with a 503 on purpose, and the browser logs every one.
 
 Two habits worth naming:
 
@@ -305,8 +327,8 @@ Two habits worth naming:
    is the reason a batch link dies on refresh — the app says so plainly rather than pretending.
 5. **Bulk correction.** Corrections are per document; a queue of 7,900 wants "apply to all
    matching".
-6. **Real E2E coverage.** Playwright is configured and the flows are scripted, but the suite is
-   thin next to the unit tests.
+6. **Widen the E2E suite.** Three flows cover the spine; the failure and retry paths, pause and
+   resume, and the small screens are still only covered by unit and component tests.
 7. **A confirm-and-advance flow in the review queue** — saving should move to the next record,
    because that is how a queue is actually worked.
 
