@@ -12,6 +12,8 @@ export type SimulatorConfig = {
    * transient by definition, so a second attempt should usually clear.
    */
   retryImprovement: number;
+  /** Share of individual file uploads that fail transiently. */
+  uploadFailureRate: number;
 };
 
 export const DEFAULT_SIMULATOR_CONFIG: SimulatorConfig = {
@@ -20,4 +22,5 @@ export const DEFAULT_SIMULATOR_CONFIG: SimulatorConfig = {
   failureRate: 0.07,
   reviewRate: 0.09,
   retryImprovement: 0.25,
+  uploadFailureRate: 0.06,
 };

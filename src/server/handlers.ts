@@ -4,6 +4,7 @@ import {
   API_BASE,
   correctionSchema,
   createBatchSchema,
+  uploadFileSchema,
   fromSearchParams,
   retryBatchSchema,
   type ApiError,
@@ -141,6 +142,35 @@ export const handlers = [
     retryDocuments(db, batch, retryable);
 
     return HttpResponse.json({ retried: retryable.length, skipped: 0 } satisfies RetryResult);
+  }),
+
+  /**
+   * Accepts one file. Fails transiently at the configured rate so the queue's
+   * backoff and retry are exercised by something real rather than simulated in
+   * the client, and so the network tab shows what actually happened.
+   */
+  http.post(`${ROUTE}/uploads`, async ({ request }) => {
+    const db = getDatabase();
+    await delay(db.latency.write);
+
+    const parsed = uploadFileSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return fail(400, {
+        code: 'invalid_request',
+        message: 'That file could not be read.',
+        remedy: 'Check the file and try again.',
+      });
+    }
+
+    if (Math.random() < db.config.uploadFailureRate) {
+      return fail(503, {
+        code: 'server_error',
+        message: 'The upload service was briefly unavailable.',
+        remedy: 'This usually clears on its own.',
+      });
+    }
+
+    return HttpResponse.json({ accepted: true });
   }),
 
   http.get(`${ROUTE}/batches`, async () => {
