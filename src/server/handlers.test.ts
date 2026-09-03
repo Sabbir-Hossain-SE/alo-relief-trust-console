@@ -144,8 +144,7 @@ describe('PATCH /documents/:id', () => {
   it('records the corrected value as operator-sourced', async () => {
     const target = await findNeedsReview();
     const { status, body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
-      field: 'personName',
-      value: 'Corrected Name',
+      corrections: [{ field: 'personName', value: 'Corrected Name' }],
     });
 
     expect(status).toBe(200);
@@ -156,10 +155,11 @@ describe('PATCH /documents/:id', () => {
 
   it('appends to the audit trail', async () => {
     const target = await findNeedsReview();
-    await send('PATCH', `/documents/${target.id}`, { field: 'personName', value: 'One' });
+    await send('PATCH', `/documents/${target.id}`, {
+      corrections: [{ field: 'personName', value: 'One' }],
+    });
     const { body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
-      field: 'phone',
-      value: '+8801700000000',
+      corrections: [{ field: 'phone', value: '+8801700000000' }],
     });
 
     expect(body.corrections).toHaveLength(2);
@@ -168,7 +168,9 @@ describe('PATCH /documents/:id', () => {
 
   it('persists across a subsequent read', async () => {
     const target = await findNeedsReview();
-    await send('PATCH', `/documents/${target.id}`, { field: 'location', value: 'Dhaka' });
+    await send('PATCH', `/documents/${target.id}`, {
+      corrections: [{ field: 'location', value: 'Dhaka' }],
+    });
 
     const { body } = await get<DocumentDetail>(`/documents/${target.id}`);
     expect(body.fields.location.value).toBe('Dhaka');
@@ -177,18 +179,56 @@ describe('PATCH /documents/:id', () => {
   it('rejects an unknown field', async () => {
     const target = await findNeedsReview();
     const { status, body } = await send<ApiError>('PATCH', `/documents/${target.id}`, {
-      field: 'notAField',
-      value: 'x',
+      corrections: [{ field: 'notAField', value: 'x' }],
     });
 
     expect(status).toBe(400);
     expect(body.code).toBe('invalid_request');
   });
 
+  it('applies a whole pass over a record in one request', async () => {
+    const target = await findNeedsReview();
+    const { body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
+      corrections: [
+        { field: 'personName', value: 'Rehana Sarker' },
+        { field: 'location', value: 'Sylhet Sadar' },
+        { field: 'phone', value: '+8801700000000' },
+      ],
+    });
+
+    expect(body.fields.personName.value).toBe('Rehana Sarker');
+    expect(body.fields.location.value).toBe('Sylhet Sadar');
+    expect(body.corrections).toHaveLength(3);
+  });
+
+  it('rejects a pass with no corrections in it', async () => {
+    const target = await findNeedsReview();
+    const { status } = await send('PATCH', `/documents/${target.id}`, { corrections: [] });
+
+    expect(status).toBe(400);
+  });
+
+  it('takes a corrected document out of the review queue', async () => {
+    const target = await findNeedsReview();
+    const detail = await get<DocumentDetail>(`/documents/${target.id}`);
+
+    // Every uncertain field answered, so there is nothing left to check.
+    const corrections = Object.entries(detail.body.fields)
+      .filter(([, field]) => field.source !== 'manual' && field.confidence < 0.7)
+      .map(([field]) => ({ field, value: 'Checked by hand' }));
+
+    expect(corrections.length).toBeGreaterThan(0);
+
+    const { body } = await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
+      corrections,
+    });
+
+    expect(body.status).toBe('completed');
+  });
+
   it('is a 404 for a document that does not exist', async () => {
     const { status } = await send('PATCH', '/documents/ARC-999999', {
-      field: 'personName',
-      value: 'x',
+      corrections: [{ field: 'personName', value: 'x' }],
     });
 
     expect(status).toBe(404);

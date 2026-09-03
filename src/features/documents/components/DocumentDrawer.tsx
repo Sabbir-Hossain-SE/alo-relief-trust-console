@@ -10,19 +10,20 @@ import Typography from '@mui/material/Typography';
 import { StatusChip } from '@/components/data/StatusChip';
 import { ActionOutcome } from '@/components/feedback/ActionOutcome';
 import { ErrorState } from '@/components/feedback/ErrorState';
-import { NORMALIZED_FIELD_KEYS, NORMALIZED_FIELD_LABELS } from '@/domain/document';
+import { NORMALIZED_FIELD_KEYS } from '@/domain/document';
 import { formatDateTime } from '@/lib/format/date';
 import { formatBytes } from '@/lib/format/number';
 import {
+  useCorrectDocumentMutation,
   useGetDocumentQuery,
   useRetryDocumentMutation,
   useSendDocumentToManualEntryMutation,
 } from '@/store/api';
 import { apiErrorMessage } from '@/store/apiError';
 import { DocumentMeta } from './DocumentMeta';
+import { DocumentRecord } from './DocumentRecord';
 import { FailureNotice } from './FailureNotice';
 import { ManualEntryNotice } from './ManualEntryNotice';
-import { FieldRow } from './FieldRow';
 
 type DocumentDrawerProps = {
   documentId: string | null;
@@ -44,14 +45,17 @@ export function DocumentDrawer({ documentId, onClose }: DocumentDrawerProps) {
     skip: documentId === null,
   });
 
+  const [correct, correctState] = useCorrectDocumentMutation();
   const [retry, retryState] = useRetryDocumentMutation();
   const [sendToManualEntry, manualState] = useSendDocumentToManualEntryMutation();
 
   // Every action says what it did. A silent button leaves an operator unsure
   // whether the click registered, and clicking twice queues the work twice.
   const outcome =
+    apiErrorMessage(correctState.error) ??
     apiErrorMessage(retryState.error) ??
     apiErrorMessage(manualState.error) ??
+    (correctState.isSuccess ? 'Correction saved.' : undefined) ??
     (retryState.isSuccess ? 'Queued for another attempt.' : undefined) ??
     (manualState.isSuccess ? 'Moved to the review queue for manual entry.' : undefined);
 
@@ -129,22 +133,13 @@ export function DocumentDrawer({ documentId, onClose }: DocumentDrawerProps) {
             <ManualEntryNotice errorCode={data.errorCode} />
           ) : null}
 
-          <Box>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Extracted information
-            </Typography>
-
-            <Box className="mt-2 flex flex-col gap-2">
-              {NORMALIZED_FIELD_KEYS.map((key) => (
-                <FieldRow
-                  key={key}
-                  label={NORMALIZED_FIELD_LABELS[key]}
-                  field={data.fields[key]}
-                  underReview={data.status === 'needs_review'}
-                />
-              ))}
-            </Box>
-          </Box>
+          <DocumentRecord
+            document={data}
+            isSaving={correctState.isLoading}
+            onSave={(corrections) =>
+              corrections.length > 0 ? void correct({ id: data.id, corrections }) : undefined
+            }
+          />
 
           <DocumentMeta
             pageCount={data.pageCount}

@@ -2,7 +2,7 @@ import { HttpResponse, delay, http } from 'msw';
 import { describeError } from '@/domain/errors';
 import {
   API_BASE,
-  correctionSchema,
+  correctionsSchema,
   createBatchSchema,
   uploadFileSchema,
   fromSearchParams,
@@ -97,16 +97,18 @@ export const handlers = [
     const index = resolveIndex(params.id);
     if (index === null) return notFound('That document');
 
-    const parsed = correctionSchema.safeParse(await request.json());
+    const parsed = correctionsSchema.safeParse(await request.json());
     if (!parsed.success) {
       return fail(400, {
         code: 'invalid_request',
         message: 'That correction could not be read.',
-        remedy: 'Check the field name and try again.',
+        remedy: 'Send at least one field and value.',
       });
     }
 
-    correctDocument(db, index, parsed.data.field, parsed.data.value);
+    for (const { field, value } of parsed.data.corrections) {
+      correctDocument(db, index, field, value);
+    }
 
     return HttpResponse.json(detailAt(db.store, db.overlay, index));
   }),

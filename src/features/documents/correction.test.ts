@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest';
+import type { NormalizedRecord } from '@/domain/document';
+import { changedFields, correctionFormSchema, formValuesFrom, uncertainFields } from './correction';
+
+function record(overrides: Partial<Record<keyof NormalizedRecord, string | undefined>> = {}) {
+  const base: Record<keyof NormalizedRecord, string | undefined> = {
+    personName: 'Nasrin Ali',
+    phone: '+8801711111111',
+    location: 'Sylhet Sadar',
+    programName: 'Winter relief',
+    documentDate: '2024-03-18',
+    ...overrides,
+  };
+
+  return Object.fromEntries(
+    Object.entries(base).map(([key, value]) => [
+      key,
+      { value, confidence: 0.4, source: 'ocr' as const },
+    ]),
+  ) as NormalizedRecord;
+}
+
+const valid = {
+  personName: 'Nasrin Ali',
+  phone: '+8801711111111',
+  location: 'Sylhet Sadar',
+  programName: 'Winter relief',
+  documentDate: '2024-03-18',
+};
+
+describe('correctionFormSchema', () => {
+  it('accepts a complete record', () => {
+    expect(correctionFormSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('lets every field be left empty', () => {
+    // A page with no phone number on it is a fact about the document. Refusing
+    // to save would push an operator into inventing one.
+    const blank = { ...valid, phone: '', personName: '', documentDate: '' };
+    expect(correctionFormSchema.safeParse(blank).success).toBe(true);
+  });
+
+  it('accepts the local number styles an archive actually holds', () => {
+    for (const phone of ['+8801711111111', '01711 111111', '(02) 55 66 77', '02-9556677']) {
+      expect(correctionFormSchema.safeParse({ ...valid, phone }).success).toBe(true);
+    }
+  });
+
+  it('rejects a phone number that is not one', () => {
+    expect(correctionFormSchema.safeParse({ ...valid, phone: 'call the office' }).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects a day that does not exist', () => {
+    expect(correctionFormSchema.safeParse({ ...valid, documentDate: '2024-02-31' }).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects a document dated in the future', () => {
+    expect(correctionFormSchema.safeParse({ ...valid, documentDate: '2099-01-01' }).success).toBe(
+      false,
+    );
+  });
+
+  it('trims what an operator typed', () => {
+    const parsed = correctionFormSchema.parse({ ...valid, personName: '  Nasrin Ali  ' });
+    expect(parsed.personName).toBe('Nasrin Ali');
+  });
+});
+
+describe('formValuesFrom', () => {
+  it('reads a missing value as an empty field, not as undefined', () => {
+    expect(formValuesFrom(record({ phone: undefined })).phone).toBe('');
+  });
+});
+
+describe('changedFields', () => {
+  it('sends only what the operator actually changed', () => {
+    const fields = record();
+    const values = { ...formValuesFrom(fields), personName: 'Nasrin Ali Khan' };
+
+    expect(changedFields(fields, values)).toEqual([
+      { field: 'personName', value: 'Nasrin Ali Khan' },
+    ]);
+  });
+
+  it('sends nothing when nothing moved', () => {
+    const fields = record();
+    expect(changedFields(fields, formValuesFrom(fields))).toEqual([]);
+  });
+
+  it('treats filling a missing value as a change', () => {
+    const fields = record({ phone: undefined });
+    const values = { ...formValuesFrom(fields), phone: '+8801700000000' };
+
+    expect(changedFields(fields, values)).toEqual([{ field: 'phone', value: '+8801700000000' }]);
+  });
+});
+
+describe('uncertainFields', () => {
+  it('records a confirmation as a correction, at the value already there', () => {
+    const fields = record();
+    const values = formValuesFrom(fields);
+
+    expect(uncertainFields(values, (key) => key === 'location')).toEqual([
+      { field: 'location', value: 'Sylhet Sadar' },
+    ]);
+  });
+});

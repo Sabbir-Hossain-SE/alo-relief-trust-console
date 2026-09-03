@@ -50,6 +50,19 @@ export const correctionSchema = z.object({
 
 export type CorrectionInput = z.infer<typeof correctionSchema>;
 
+/**
+ * A whole pass over a record, not one field at a time.
+ *
+ * An operator working through a review task usually fixes several fields at
+ * once. Sending them separately would mean a request and a refetch per field,
+ * and an audit trail that reads as several visits rather than one.
+ */
+export const correctionsSchema = z.object({
+  corrections: z.array(correctionSchema).min(1).max(NORMALIZED_FIELD_KEYS.length),
+});
+
+export type CorrectionsInput = z.infer<typeof correctionsSchema>;
+
 export const retryBatchSchema = z.object({
   /** Restricts the retry to these documents; omitted means every retryable failure. */
   indices: z.array(z.number().int().min(0)).optional(),
