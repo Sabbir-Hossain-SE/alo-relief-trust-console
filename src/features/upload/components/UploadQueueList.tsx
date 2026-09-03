@@ -10,6 +10,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { alpha } from '@mui/material/styles';
+import { ProgressAnnouncer } from '@/components/feedback/ProgressAnnouncer';
 import { VirtualList } from '@/components/data/VirtualList';
 import type { QueueSnapshot, QueueTask } from '@/lib/upload-queue/types';
 import { formatCount, formatPercent } from '@/lib/format/number';
@@ -64,14 +65,7 @@ export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: Uploa
     <Paper className="flex flex-col">
       <Box className="flex flex-wrap items-center justify-between gap-3 p-4">
         <Box>
-          {/* Announced on the tens, not on every file: a per-file update would
-              make a screen reader unusable on a large upload. */}
-          <Typography
-            variant="body2"
-            aria-live="polite"
-            aria-atomic
-            key={Math.floor(snapshot.completion * 10)}
-          >
+          <Typography variant="body2" className="figures">
             {formatCount(finished)} of {formatCount(snapshot.total)} sent ·{' '}
             {formatPercent(finished, snapshot.total)}
           </Typography>
@@ -115,6 +109,12 @@ export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: Uploa
         label="Upload queue"
         getKey={(task) => task.id}
         renderItem={(task) => <TaskRow task={task} />}
+      />
+
+      <ProgressAnnouncer
+        completion={snapshot.completion}
+        message={`${formatCount(finished)} of ${formatCount(snapshot.total)} files sent${snapshot.failed > 0 ? `, ${formatCount(snapshot.failed)} failed` : ''}.`}
+        settled={snapshot.settled}
       />
     </Paper>
   );

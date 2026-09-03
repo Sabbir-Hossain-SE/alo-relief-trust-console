@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
+import { StickyBatchBar } from '@/features/batches/StickyBatchBar';
 import { SideNav } from './SideNav';
 import { TopBar } from './TopBar';
 
@@ -22,6 +23,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Box component="main" id="main-content" tabIndex={-1} className="flex-1 px-4 py-6 md:px-8">
           {children}
         </Box>
+
+        <StickyBatchBar />
       </Box>
     </Box>
   );
