@@ -1,18 +1,30 @@
 import { createTheme } from '@mui/material/styles';
 import type { ProcessingStatus } from '@/domain/status';
-import { brand, fontStacks, motion, radii, statusTones, surfaces, type StatusTone } from './tokens';
+import {
+  brand,
+  brandMark,
+  fontStacks,
+  motion,
+  radii,
+  statusTones,
+  surfaces,
+  type StatusTone,
+} from './tokens';
 
 declare module '@mui/material/styles' {
   interface Palette {
     status: Record<ProcessingStatus, StatusTone>;
     accent: string;
     accentInk: string;
+    /** The logo's horizon, the one part of the mark that follows the scheme. */
+    brandHorizon: string;
     hairline: string;
   }
   interface PaletteOptions {
     status?: Record<ProcessingStatus, StatusTone>;
     accent?: string;
     accentInk?: string;
+    brandHorizon?: string;
     hairline?: string;
   }
 }
@@ -41,6 +53,7 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
           primary: { main: brand.primary.light },
           accent: brand.accent.light,
           accentInk: brand.accentInk.light,
+          brandHorizon: brandMark.horizon.light,
           status: statusTones.light,
           hairline: surfaces.light.hairline,
           background: { default: surfaces.light.ground, paper: surfaces.light.surface },
@@ -54,6 +67,7 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
           primary: { main: brand.primary.dark },
           accent: brand.accent.dark,
           accentInk: brand.accentInk.dark,
+          brandHorizon: brandMark.horizon.dark,
           status: statusTones.dark,
           hairline: surfaces.dark.hairline,
           background: { default: surfaces.dark.ground, paper: surfaces.dark.surface },
