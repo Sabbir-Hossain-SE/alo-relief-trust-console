@@ -10,7 +10,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { alpha } from '@mui/material/styles';
-import { ProgressAnnouncer } from '@/components/feedback/ProgressAnnouncer';
+import { ProgressAnnouncer, decile } from '@/components/feedback/ProgressAnnouncer';
 import { VirtualList } from '@/components/data/VirtualList';
 import type { QueueSnapshot, QueueTask } from '@/lib/upload-queue/types';
 import { formatCount, formatPercent } from '@/lib/format/number';
@@ -36,14 +36,22 @@ function TaskRow({ task }: { task: QueueTask }) {
 
       <Box className="w-40 shrink-0">
         {task.status === 'running' ? (
-          <LinearProgress variant="determinate" value={task.progress * 100} />
+          <LinearProgress
+            variant="determinate"
+            value={task.progress * 100}
+            aria-label={`Uploading ${task.label}`}
+          />
         ) : (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {task.status === 'waiting'
               ? `Retrying · attempt ${task.attempts + 1}`
               : task.status === 'failed'
                 ? (task.error ?? 'Failed')
-                : task.status}
+                : // The tick beside a sent file is decorative to a screen
+                  // reader, so the outcome has to be readable as text too.
+                  task.status === 'succeeded'
+                  ? 'Sent'
+                  : task.status}
           </Typography>
         )}
       </Box>
@@ -94,6 +102,7 @@ export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: Uploa
       <LinearProgress
         variant="determinate"
         value={snapshot.completion * 100}
+        aria-label="Upload progress"
         sx={(theme) => ({
           height: 4,
           backgroundColor: alpha(theme.palette.primary.main, 0.15),
@@ -112,9 +121,9 @@ export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: Uploa
       />
 
       <ProgressAnnouncer
-        completion={snapshot.completion}
+        step={decile(snapshot.completion)}
         message={`${formatCount(finished)} of ${formatCount(snapshot.total)} files sent${snapshot.failed > 0 ? `, ${formatCount(snapshot.failed)} failed` : ''}.`}
-        settled={snapshot.settled}
+        final={snapshot.settled}
       />
     </Paper>
   );

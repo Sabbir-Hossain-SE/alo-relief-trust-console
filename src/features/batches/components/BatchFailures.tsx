@@ -46,7 +46,17 @@ export function BatchFailures({ summary }: { summary: BatchSummary }) {
   const [retryBatch, retryState] = useRetryBatchMutation();
   const [sendToManualEntry, manualState] = useSendBatchToManualEntryMutation();
 
-  if (summary.counts.failed === 0) return null;
+  const outcome = outcomeLines(retryState.data, manualState.data);
+
+  // Once the failures clear, this panel would unmount — taking with it the very
+  // message reporting what the action just did. The confirmation outlives it.
+  if (summary.counts.failed === 0) {
+    return outcome.length === 0 ? null : (
+      <Paper className="p-5">
+        <ActionOutcome lines={outcome} />
+      </Paper>
+    );
+  }
 
   const manual = summary.counts.failed - summary.retryableFailures;
   const busy = retryState.isLoading || manualState.isLoading;
@@ -96,7 +106,7 @@ export function BatchFailures({ summary }: { summary: BatchSummary }) {
         </Button>
       </Box>
 
-      <ActionOutcome lines={outcomeLines(retryState.data, manualState.data)} />
+      <ActionOutcome lines={outcome} />
     </Paper>
   );
 }

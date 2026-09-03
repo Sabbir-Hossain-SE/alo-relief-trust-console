@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithTheme } from '@/test/render';
+import { expectNoViolations } from '@/test/axe';
 import type { NormalizedRecord } from '@/domain/document';
 import { CorrectionForm } from './CorrectionForm';
 
@@ -116,6 +117,15 @@ describe('CorrectionForm', () => {
   it('offers no confirmation when nothing is flagged', () => {
     setup({}, false);
     expect(screen.queryByRole('button', { name: 'These values are correct' })).toBeNull();
+  });
+
+  it('has no accessibility violations', async () => {
+    const onSave = vi.fn();
+    const { container } = renderWithTheme(
+      <CorrectionForm fields={fields()} underReview isSaving={false} onSave={onSave} />,
+    );
+
+    await expectNoViolations(container);
   });
 
   it('is fully reachable from the keyboard', async () => {

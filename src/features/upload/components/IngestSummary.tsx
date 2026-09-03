@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { REJECTION_LABELS } from '@/lib/file-ingest/validate';
 import type { IngestProgress, IngestResult, RejectionReason } from '@/lib/file-ingest/types';
+import { ProgressAnnouncer, everyNth } from '@/components/feedback/ProgressAnnouncer';
 import { formatCount } from '@/lib/format/number';
 import { UploadPanel } from './UploadPanel';
 
@@ -21,6 +22,9 @@ function groupRejections(result: IngestResult): [RejectionReason, number][] {
   return [...counts.entries()];
 }
 
+/** Far enough apart that a 50,000-file walk speaks a couple of dozen times. */
+const ANNOUNCE_EVERY = 2000;
+
 export function IndexingProgress({
   progress,
   onCancel,
@@ -34,15 +38,21 @@ export function IndexingProgress({
         {formatCount(progress.scanned)}
       </Typography>
 
-      {/* Announced politely: this can run for a while on a large folder, and a
-          screen reader user needs to know it is still working. */}
-      <Typography variant="body2" sx={{ color: 'text.secondary' }} aria-live="polite">
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
         files indexed so far
       </Typography>
 
+      {/* The live region has to hold the number. It used to wrap these two
+          static words while the count sat outside it, so the region's text
+          never changed and nothing was ever announced. */}
+      <ProgressAnnouncer
+        step={everyNth(progress.scanned, ANNOUNCE_EVERY)}
+        message={`${formatCount(progress.scanned)} files indexed so far.`}
+      />
+
       {/* Indeterminate on purpose: the total is unknown until the walk ends, and
           a bar that invents a percentage is worse than one that admits it. */}
-      <LinearProgress sx={{ width: '100%', maxWidth: 320, mt: 1 }} />
+      <LinearProgress aria-label="Indexing files" sx={{ width: '100%', maxWidth: 320, mt: 1 }} />
 
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {formatCount(progress.accepted)} accepted · {formatCount(progress.rejected)} skipped

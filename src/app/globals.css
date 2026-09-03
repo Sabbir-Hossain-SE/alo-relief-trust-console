@@ -25,11 +25,17 @@ body {
 
 /* A keyboard-only escape hatch past the navigation. */
 .skip-link {
-  position: absolute;
+  position: fixed;
   left: -9999px;
   top: 0;
-  z-index: 100;
+  /* Above MUI's drawer (1200) and app bar (1100), or it moves into view and
+     is painted over by both at exactly the corner it moves to. */
+  z-index: 1400;
   padding: 0.75rem 1rem;
+  background-color: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-primary);
+  border: 1px solid var(--mui-palette-divider);
+  border-radius: 0 0 8px 0;
 }
 
 .skip-link:focus {
@@ -56,12 +62,20 @@ body {
     border-radius: 6px;
   }
 
+  /* The iteration count is the load-bearing line. Collapsing the duration of an
+     infinite animation does not stop it — it makes it cycle as fast as the
+     compositor allows, so a spinner or a field of skeletons strobes instead of
+     resting. That is worse for a reduced-motion user than leaving it alone. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }

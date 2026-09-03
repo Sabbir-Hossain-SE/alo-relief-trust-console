@@ -12,8 +12,11 @@ import { formatDate } from '@/lib/format/date';
 // Values the pipeline has not produced yet, shown as absent rather than as zero.
 function Absent() {
   return (
-    <Typography component="span" variant="body2" sx={{ color: 'text.disabled' }} aria-label="None">
-      —
+    // An em-dash reads as punctuation or as nothing at all. `aria-label` on a
+    // roleless span is not a name, so the word has to be in the tree itself.
+    <Typography component="span" variant="body2" sx={{ color: 'text.disabled' }}>
+      <span aria-hidden>—</span>
+      <span className="sr-only">None</span>
     </Typography>
   );
 }
@@ -112,7 +115,10 @@ export const documentColumns: GridColDef<DocumentSummary>[] = [
 
       const spec = describeError(row.errorCode);
       return (
-        <Tooltip title={spec.remedy}>
+        // `describeChild` keeps the remedy as a description. Without it MUI puts
+        // it in `aria-label`, so the cell announced the remedy instead of the
+        // failure it is showing — a name that does not match its visible text.
+        <Tooltip title={spec.remedy} describeChild>
           <Typography component="span" variant="body2" sx={{ color: 'status.failed.ink' }}>
             {spec.title}
           </Typography>

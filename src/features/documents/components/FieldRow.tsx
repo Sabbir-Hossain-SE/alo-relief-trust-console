@@ -51,6 +51,13 @@ export function FieldRow({ label, field, underReview = false }: FieldRowProps) {
 
         {field.source === 'manual' ? (
           <Chip size="small" label="Corrected" sx={{ height: 20, fontSize: '0.7rem' }} />
+        ) : needsReview ? (
+          // The tint and border carried this on their own, which is nothing at
+          // all to a screen reader and nothing to anyone who cannot separate
+          // the two backgrounds.
+          <Typography variant="caption" sx={{ color: 'status.needs_review.ink' }}>
+            Needs checking
+          </Typography>
         ) : null}
       </Box>
 

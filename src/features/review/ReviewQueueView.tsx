@@ -62,7 +62,10 @@ function ReviewQueue() {
         />
       ) : (
         <Box className="flex flex-col gap-3">
-          <Typography variant="body2" aria-live="polite" sx={{ color: 'text.secondary' }}>
+          {/* Deliberately not a live region. Polling refreshes this every 1.5s
+              while a batch runs, so announcing it would talk over everything
+              else — the same mistake ProgressAnnouncer exists to avoid. */}
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {formatCount(data.total)} {data.total === 1 ? 'record needs' : 'records need'} checking
             {data.total > data.rows.length
               ? ` · working through the ${formatCount(data.rows.length)} least certain`
@@ -75,10 +78,12 @@ function ReviewQueue() {
               itemHeight={TASK_HEIGHT}
               height={LIST_HEIGHT}
               label="Review queue"
+              roving
               getKey={(row) => row.id}
-              renderItem={(row) => (
+              renderItem={(row, _index, rowProps) => (
                 <ReviewTask
                   row={row}
+                  rowProps={rowProps}
                   onOpen={() => select(row.id)}
                   isOpen={row.id === selectedId}
                 />

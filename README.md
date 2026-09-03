@@ -21,7 +21,7 @@ Built and verified on Node 22.15 and pnpm 9.15 (`.nvmrc` pins the major). No env
 100,000 documents is generated in the browser on first load.
 
 ```bash
-pnpm test           # 409 unit and component tests
+pnpm test           # 434 unit and component tests, including axe checks
 pnpm bench          # the performance numbers quoted below
 pnpm typecheck      # next typegen && tsc --noEmit
 pnpm lint
@@ -252,15 +252,26 @@ Verified by keyboard and by reading the accessibility tree, not asserted:
 - **The detail drawer is a real dialog** — focus trapped, focus restored on close, Escape
   closes, and an explicit `role="dialog"`.
 - **A visible focus ring is unconditional**, set in the app layer rather than relying on
-  component defaults.
-- `prefers-reduced-motion` disables every transition.
+  component defaults, and the skip link is painted above the navigation instead of behind it.
+- **The documents grid opens a record from the keyboard.** MUI publishes its row-click event
+  from the DOM click alone, so until the accessibility pass the main screen's primary action
+  was reachable only with a mouse.
+- **`prefers-reduced-motion` actually stops the motion**, verified by reading computed styles
+  rather than by eye. The usual one-liner for this collapses `animation-duration` but leaves
+  `animation-iteration-count`, which makes an infinite animation cycle faster instead of
+  stopping — this app shipped that bug until the accessibility pass caught it. The preference
+  is also read in JavaScript and used to build the theme, because MUI times its enter and exit
+  callbacks with `setTimeout` and no stylesheet can reach those.
+- **Virtualized lists state their real size and keep one roving tab stop.** Only about twenty
+  rows of a 200-record queue exist in the DOM, so `aria-setsize` reports the true count, and
+  the arrow keys move focus through every item rather than tabbing off the end of the window.
 
 ---
 
 ## Testing
 
-**409 tests across 25 files.** Coverage of `domain/`, `lib/` and `server/` is **89% of
-statements**.
+**434 tests across 29 files.** Coverage of `domain/`, `lib/` and `server/` is **89% of
+statements**, and axe-core runs over the interactive components on every `pnpm test`.
 
 The weight is deliberately on the framework-free core — the state machine, the query engine,
 the discrete-event simulator, the upload queue's concurrency, backoff, pause and cancel — and
