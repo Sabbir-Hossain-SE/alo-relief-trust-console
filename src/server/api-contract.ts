@@ -34,6 +34,13 @@ export const createBatchSchema = z.object({
 
 export type CreateBatchInput = z.infer<typeof createBatchSchema>;
 
+export const uploadFileSchema = z.object({
+  name: z.string().min(1).max(400),
+  size: z.number().int().min(1),
+});
+
+export type UploadFileInput = z.infer<typeof uploadFileSchema>;
+
 export const correctionSchema = z.object({
   field: z.enum(NORMALIZED_FIELD_KEYS),
   value: z.string().trim().max(200),
