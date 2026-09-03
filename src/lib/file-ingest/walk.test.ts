@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FsDirectoryEntry, FsEntry, FsFileEntry, IngestProgress } from './types';
-import { ingestFileList, walkEntries } from './walk';
+import { entriesFromDataTransfer, ingestFileList, walkEntries } from './walk';
 
 function file(path: string, size = 1024): FsFileEntry {
   const name = path.slice(path.lastIndexOf('/') + 1);
@@ -238,5 +238,41 @@ describe('ingestFileList', () => {
 
   it('handles an empty selection', async () => {
     expect(await ingestFileList([])).toMatchObject({ accepted: 0, cancelled: false });
+  });
+});
+
+describe('entriesFromDataTransfer', () => {
+  function item(kind: string, entry: FsEntry | null): DataTransferItem {
+    return { kind, webkitGetAsEntry: () => entry } as unknown as DataTransferItem;
+  }
+
+  function drop(items: DataTransferItem[]): DataTransfer {
+    return { items } as unknown as DataTransfer;
+  }
+
+  it('pulls out the dropped files and folders', () => {
+    const scan = file('/drop/scan.pdf');
+    const folder = directory('/drop/intake', []);
+
+    expect(entriesFromDataTransfer(drop([item('file', scan), item('file', folder)]))).toEqual([
+      scan,
+      folder,
+    ]);
+  });
+
+  // Dragging selected text alongside a file puts a string item in the same
+  // list, and it has no entry to walk.
+  it('ignores items that are not files', () => {
+    expect(entriesFromDataTransfer(drop([item('string', null)]))).toEqual([]);
+  });
+
+  // The entry API returns null for anything the browser will not expose as a
+  // filesystem entry, and the caller falls back to `dataTransfer.files`.
+  it('drops items the browser gives no entry for', () => {
+    expect(entriesFromDataTransfer(drop([item('file', null)]))).toEqual([]);
+  });
+
+  it('handles an empty drop', () => {
+    expect(entriesFromDataTransfer(drop([]))).toEqual([]);
   });
 });

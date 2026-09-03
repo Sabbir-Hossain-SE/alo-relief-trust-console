@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createUploadQueue } from './queue';
+import { TASK_STATUSES } from './types';
 import type { QueueItem, RunContext } from './types';
 
 function items(count: number): QueueItem[] {
@@ -412,5 +413,105 @@ describe('cancellation', () => {
 
     expect(calls).toBe(1);
     expect(queue.snapshot().cancelled).toBe(1);
+  });
+});
+
+describe('the built-in backoff wait', () => {
+  // Every other test injects `sleep` to keep the suite instant, which leaves the
+  // wait the application actually ships with unexercised.
+  it('really waits between attempts when nothing is injected', async () => {
+    let calls = 0;
+    const started = Date.now();
+
+    const queue = createUploadQueue(items(1), {
+      maxAttempts: 2,
+      baseDelayMs: 30,
+      run: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('503');
+      },
+    });
+
+    await queue.start();
+
+    expect(calls).toBe(2);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(25);
+    expect(queue.snapshot().succeeded).toBe(1);
+  });
+
+  it('abandons the wait as soon as the queue is cancelled', async () => {
+    const queue = createUploadQueue(items(1), {
+      maxAttempts: 3,
+      // Long enough that finishing at all proves the wait was cut short rather
+      // than waited out.
+      baseDelayMs: 30_000,
+      run: async () => {
+        throw new Error('503');
+      },
+    });
+
+    const started = Date.now();
+    const done = queue.start();
+    await tick();
+    queue.cancel();
+    await done;
+
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(queue.snapshot().settled).toBe(true);
+  });
+});
+
+describe('pause then cancel', () => {
+  // The queue bar offers both, and an operator who pauses and then gives up
+  // leaves workers parked inside an attempt rather than between two.
+  it('cancels the work parked at the pause instead of resuming it', async () => {
+    let started = 0;
+
+    const queue = createUploadQueue(items(8), {
+      concurrency: 2,
+      run: async () => {
+        started += 1;
+        await tick();
+      },
+    });
+
+    const done = queue.start();
+    await tick();
+    queue.pause();
+    await tick();
+
+    const atPause = started;
+    queue.cancel();
+    await done;
+
+    const snapshot = queue.snapshot();
+    expect(started).toBe(atPause);
+    expect(snapshot.settled).toBe(true);
+    expect(snapshot.paused).toBe(false);
+    expect(snapshot.succeeded + snapshot.failed + snapshot.cancelled).toBe(8);
+    expect(snapshot.cancelled).toBeGreaterThan(0);
+  });
+});
+
+describe('the reported task status', () => {
+  // The queue bar renders per status, so a status it invents shows up as a task
+  // with no label rather than as an error anyone would notice.
+  it('only ever reports statuses the type declares', async () => {
+    const queue = createUploadQueue(items(6), {
+      concurrency: 2,
+      maxAttempts: 2,
+      sleep: async () => undefined,
+      run: async (item) => {
+        if (item.id === 'f1') throw new Error('503');
+      },
+    });
+
+    queue.cancelTask('f5');
+    await queue.start();
+
+    const seen = new Set(queue.snapshot().tasks.map((task) => task.status));
+
+    expect([...seen].every((status) => TASK_STATUSES.includes(status))).toBe(true);
+    expect(seen).toEqual(new Set(['succeeded', 'failed', 'cancelled']));
   });
 });
