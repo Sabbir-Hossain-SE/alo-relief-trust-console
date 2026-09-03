@@ -27,6 +27,7 @@ pnpm e2e            # 11 Playwright flows against a production build
                     # first run: pnpm exec playwright install chromium
 pnpm bench          # the performance numbers quoted below
 pnpm screenshots    # recapture the images below, against a running build
+pnpm icons          # re-render the raster icons from src/app/icon.svg
 pnpm typecheck      # next typegen && tsc --noEmit
 pnpm lint
 pnpm build
@@ -437,6 +438,19 @@ Fraunces for display figures, Inter for the interface, JetBrains Mono with tabul
 identifiers and counts so numbers do not jitter as they tick up. Motion is slow, and only ever
 communicates a state change.
 
+The mark is a sun rising over a horizon that doubles as the edge of a page. Only the horizon
+follows the theme — through the palette, so it tracks the in-app toggle rather than only the
+operating system's setting. The sun stays the same in both, because it reads on either ground
+and inverting it would cost the mark its identity to fix a contrast threshold it is not held to:
+it is decoration, hidden from assistive technology, and the horizon at 14:1 is what carries the
+drawing.
+
+The favicon is the same drawing again, and it is the one surface the theme toggle cannot reach —
+a browser tab strip belongs to the browser. So `icon.svg` carries its own
+`prefers-color-scheme` rule and follows the operating system instead. The `.ico` and the Apple
+icon cannot carry a media query at all, so both are rendered with the light horizon; every
+browser that supports an SVG icon prefers it, which is nearly all of them.
+
 The shell is one bar across the full width, with a navigation rail beneath it. The brand and the
 control that collapses the rail belong to the application rather than to any page, so they stay
 in one place while the rail narrows underneath them. Collapsing it to icons is a preference, not
@@ -446,4 +460,6 @@ reason: operators differ, and a 100,000-row table is worth 176 pixels to some of
 others.
 
 The screenshots below are captured by `pnpm screenshots` rather than by hand, because an image
-of a screen that no longer exists is a claim the README is making and getting wrong.
+of a screen that no longer exists is a claim the README is making and getting wrong. The raster
+icons come from `pnpm icons`, off the same SVG, so there is one drawing of the mark rather than
+four that drift.
