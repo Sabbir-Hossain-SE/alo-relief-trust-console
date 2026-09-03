@@ -30,17 +30,30 @@ export function useDocumentQuery() {
    * replaces, because a history entry per keystroke would bury the view an
    * operator actually wants to return to.
    */
+  /** The open document, kept in the URL so a record can be linked to directly. */
+  const selectedId = searchParams.get('doc');
+
   const apply = useCallback(
-    (next: DocumentQueryInput, history: 'push' | 'replace') => {
-      const params = toSearchParams(next).toString();
-      const url = params.length > 0 ? `${pathname}?${params}` : pathname;
+    (next: DocumentQueryInput, history: 'push' | 'replace', doc?: string | null) => {
+      const params = toSearchParams(next);
+
+      // The open document is not part of the API query, so it has to be carried
+      // across explicitly or changing a filter would close the drawer.
+      const nextDoc = doc === undefined ? searchParams.get('doc') : doc;
+      if (nextDoc) params.set('doc', nextDoc);
+
+      const search = params.toString();
+      const url = search.length > 0 ? `${pathname}?${search}` : pathname;
 
       // Scroll is preserved so the grid does not jump on every change.
       if (history === 'push') router.push(url, { scroll: false });
       else router.replace(url, { scroll: false });
     },
-    [pathname, router],
+    [pathname, router, searchParams],
   );
+
+  /** Opens or closes the detail drawer. Pushes, so Back closes it. */
+  const select = useCallback((id: string | null) => apply(query, 'push', id), [apply, query]);
 
   /** Applies a change and returns to the first page, since the result set moved. */
   const update = useCallback(
@@ -65,5 +78,5 @@ export function useDocumentQuery() {
     query.batchId !== undefined ||
     (query.search ?? '').length > 0;
 
-  return { query, update, goToPage, clear, isFiltered };
+  return { query, update, goToPage, clear, isFiltered, selectedId, select };
 }
