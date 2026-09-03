@@ -6,10 +6,10 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import { alpha } from '@mui/material/styles';
 import { ACCEPT_ATTRIBUTE } from '@/lib/file-ingest/validate';
 import type { FsEntry } from '@/lib/file-ingest/types';
 import { entriesFromDataTransfer } from '@/lib/file-ingest/walk';
+import { UploadPanel } from './UploadPanel';
 
 type UploadDropzoneProps = {
   disabled?: boolean;
@@ -43,21 +43,15 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
   }
 
   return (
-    <Box
+    <UploadPanel
+      isActive={isOver}
+      dimmed={disabled}
       onDragOver={(event) => {
         event.preventDefault();
         if (!disabled) setIsOver(true);
       }}
       onDragLeave={() => setIsOver(false)}
       onDrop={handleDrop}
-      className="flex flex-col items-center justify-center gap-3 rounded-xl px-6 py-12 text-center"
-      sx={(theme) => ({
-        border: '1px dashed',
-        borderColor: isOver ? 'primary.main' : 'divider',
-        backgroundColor: isOver ? alpha(theme.palette.primary.main, 0.06) : 'background.paper',
-        opacity: disabled ? 0.6 : 1,
-        transition: theme.transitions.create(['border-color', 'background-color']),
-      })}
     >
       <CloudUploadOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled' }} />
 
@@ -114,6 +108,6 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
           event.target.value = '';
         }}
       />
-    </Box>
+    </UploadPanel>
   );
 }

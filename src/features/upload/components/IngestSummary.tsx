@@ -3,11 +3,12 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import LinearProgress from '@mui/material/LinearProgress';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { REJECTION_LABELS } from '@/lib/file-ingest/validate';
 import type { IngestProgress, IngestResult, RejectionReason } from '@/lib/file-ingest/types';
 import { formatCount } from '@/lib/format/number';
+import { UploadPanel } from './UploadPanel';
 
 // Groups rejections so the operator sees "200 spreadsheets", not 200 rows.
 function groupRejections(result: IngestResult): [RejectionReason, number][] {
@@ -28,27 +29,29 @@ export function IndexingProgress({
   onCancel: () => void;
 }) {
   return (
-    <Paper className="flex flex-col gap-3 p-4">
-      <Box className="flex flex-wrap items-center justify-between gap-2">
-        {/* Announced politely: this can run for a while on a large folder, and
-            a screen reader user needs to know it is still working. */}
-        <Typography variant="body2" aria-live="polite">
-          Indexing {formatCount(progress.scanned)} files…
-        </Typography>
+    <UploadPanel>
+      <Typography variant="h2" component="p" className="figures">
+        {formatCount(progress.scanned)}
+      </Typography>
 
-        <Button size="small" onClick={onCancel}>
-          Cancel
-        </Button>
-      </Box>
+      {/* Announced politely: this can run for a while on a large folder, and a
+          screen reader user needs to know it is still working. */}
+      <Typography variant="body2" sx={{ color: 'text.secondary' }} aria-live="polite">
+        files indexed so far
+      </Typography>
 
       {/* Indeterminate on purpose: the total is unknown until the walk ends, and
           a bar that invents a percentage is worse than one that admits it. */}
-      <LinearProgress />
+      <LinearProgress sx={{ width: '100%', maxWidth: 320, mt: 1 }} />
 
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {formatCount(progress.accepted)} accepted · {formatCount(progress.rejected)} skipped
       </Typography>
-    </Paper>
+
+      <Button size="small" onClick={onCancel} sx={{ mt: 1 }}>
+        Cancel
+      </Button>
+    </UploadPanel>
   );
 }
 
@@ -66,7 +69,9 @@ export function IngestSummary({
   const groups = groupRejections(result);
 
   return (
-    <Paper className="flex flex-col gap-4 p-4">
+    <UploadPanel>
+      <CheckCircleOutlinedIcon sx={{ fontSize: 36, color: 'status.completed.ink' }} />
+
       <Box>
         <Typography variant="h2" component="p" className="figures">
           {formatCount(result.accepted)}
@@ -82,9 +87,9 @@ export function IngestSummary({
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             Skipped {formatCount(result.rejected)}
           </Typography>
-          <Box className="mt-1 flex flex-col gap-0.5">
+          <Box className="mt-0.5 flex flex-col gap-0.5">
             {groups.map(([reason, count]) => (
-              <Typography key={reason} variant="body2">
+              <Typography key={reason} variant="body2" sx={{ color: 'text.secondary' }}>
                 {formatCount(count)} · {REJECTION_LABELS[reason]}
               </Typography>
             ))}
@@ -92,7 +97,7 @@ export function IngestSummary({
         </Box>
       ) : null}
 
-      <Box className="flex flex-wrap items-center gap-2">
+      <Box className="mt-1 flex flex-wrap items-center justify-center gap-2">
         <Button
           variant="contained"
           onClick={onStart}
@@ -101,8 +106,10 @@ export function IngestSummary({
         >
           Start processing
         </Button>
-        <Button onClick={onDiscard}>Choose different files</Button>
+        <Button variant="outlined" onClick={onDiscard}>
+          Choose different files
+        </Button>
       </Box>
-    </Paper>
+    </UploadPanel>
   );
 }
