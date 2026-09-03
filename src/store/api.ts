@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { DocumentDetail } from '@/domain/document';
 import {
-  API_BASE,
+  apiUrl,
   toSearchParams,
   type ArchiveAnalytics,
   type ArchiveSummary,
@@ -21,18 +21,9 @@ import type { BatchSummary } from '@/server/simulator/batch';
  * batch itself, and the alternative — tracking which of 100,000 documents moved
  * — would cost far more than refetching one page of fifty.
  */
-/**
- * Always absolute. Node's fetch rejects a relative URL outright, and jsdom
- * leaves the global fetch in place, so a relative base fails in tests while
- * working in the browser. Resolving against the current origin keeps requests
- * same-origin for the service worker and valid for Node.
- */
-const baseUrl =
-  typeof location === 'undefined' ? `http://localhost${API_BASE}` : `${location.origin}${API_BASE}`;
-
 export const api = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({ baseUrl }),
+  baseQuery: fetchBaseQuery({ baseUrl: apiUrl() }),
   tagTypes: ['Document', 'Batch', 'Summary'],
   endpoints: (build) => ({
     getSummary: build.query<ArchiveSummary, void>({
