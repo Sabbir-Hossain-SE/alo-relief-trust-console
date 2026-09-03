@@ -20,7 +20,8 @@ export function ConfidenceMeter({ score, showLabel = true }: ConfidenceMeterProp
 
   return (
     <Tooltip title={label}>
-      <Box className="flex items-center gap-2" role="img" aria-label={label}>
+      {/* Full height so it centres inside a grid cell as well as inline. */}
+      <Box className="flex h-full items-center gap-2" role="img" aria-label={label}>
         <Box
           className="h-1.5 w-14 overflow-hidden rounded-full"
           sx={(theme) => ({ backgroundColor: alpha(theme.palette.status[status].fill, 0.2) })}
