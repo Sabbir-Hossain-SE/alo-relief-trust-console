@@ -1,3 +1,4 @@
+import type { ProcessingErrorCode } from '@/domain/errors';
 import type { ProcessingStatus } from '@/domain/status';
 import { toSearchParams } from '@/server/api-contract';
 
@@ -9,6 +10,12 @@ import { toSearchParams } from '@/server/api-contract';
  */
 export function batchDocumentsHref(batchId: string, status?: ProcessingStatus): string {
   const params = toSearchParams({ batchId, status: status ? [status] : undefined });
+  return `/documents?${params.toString()}`;
+}
+
+/** Deep link into one cause of failure within a batch. */
+export function batchFailureHref(batchId: string, code: ProcessingErrorCode): string {
+  const params = toSearchParams({ batchId, status: ['failed'], errorCode: [code] });
   return `/documents?${params.toString()}`;
 }
 

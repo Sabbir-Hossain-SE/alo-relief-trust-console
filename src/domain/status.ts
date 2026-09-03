@@ -21,7 +21,9 @@ const ALLOWED_TRANSITIONS: Record<ProcessingStatus, readonly ProcessingStatus[]>
   pending: ['processing'],
   processing: ['completed', 'failed', 'needs_review'],
   completed: [],
-  failed: ['processing'],
+  // A failure a retry cannot fix is not a dead end: an operator can take the
+  // document on and enter its details by hand, which is a review task.
+  failed: ['processing', 'needs_review'],
   needs_review: ['completed', 'processing'],
 };
 

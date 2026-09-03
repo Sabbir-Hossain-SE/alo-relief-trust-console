@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentDetail, DocumentSummary } from '@/domain/document';
 import { isRetryable } from '@/domain/errors';
-import type { ApiError, ArchiveSummary, RetryResult } from './api-contract';
+import type { ApiError, ArchiveSummary, ManualEntryResult, RetryResult } from './api-contract';
 import { resetDatabase } from './db';
 import { server } from './node';
 import type { BatchSummary } from './simulator/batch';
@@ -280,6 +280,79 @@ describe('batch progression', () => {
   });
 });
 
+describe('manual entry', () => {
+  async function settledBatchWithFailures(): Promise<{ id: string; failed: DocumentSummary[] }> {
+    const created = await send<BatchSummary>('POST', '/batches', {
+      label: 'Intake',
+      fileCount: 300,
+    });
+    await drainBatch(created.body.id);
+
+    const { body } = await get<QueryResult>(
+      `/documents?status=failed&batch=${created.body.id}&pageSize=200`,
+    );
+    return { id: created.body.id, failed: body.rows };
+  }
+
+  it('hands a failure a retry cannot fix to an operator', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && !isRetryable(row.errorCode));
+
+    const { status, body } = await send<ManualEntryResult>(
+      'POST',
+      `/documents/${target?.id}/manual-entry`,
+    );
+
+    expect(status).toBe(200);
+    expect(body.moved).toBe(1);
+
+    const after = await get<DocumentDetail>(`/documents/${target?.id}`);
+    expect(after.body.status).toBe('needs_review');
+  });
+
+  it('keeps the cause, so the review task explains itself', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && !isRetryable(row.errorCode));
+
+    await send('POST', `/documents/${target?.id}/manual-entry`);
+    const after = await get<DocumentDetail>(`/documents/${target?.id}`);
+
+    expect(after.body.errorCode).toBe(target?.errorCode);
+  });
+
+  it('refuses a failure a retry could still clear', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && isRetryable(row.errorCode));
+
+    const { status, body } = await send<ApiError>('POST', `/documents/${target?.id}/manual-entry`);
+
+    expect(status).toBe(409);
+    expect(body.remedy).toBeDefined();
+  });
+
+  it('moves every terminal failure in a batch and leaves the rest alone', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const terminal = failed.filter((row) => row.errorCode && !isRetryable(row.errorCode)).length;
+    const retryable = failed.length - terminal;
+
+    const { status, body } = await send<ManualEntryResult>('POST', `/batches/${id}/manual-entry`);
+
+    expect(status).toBe(200);
+    expect(body.moved).toBe(terminal);
+    expect(body.skipped).toBe(retryable);
+  });
+
+  it('leaves the batch with only failures worth retrying', async () => {
+    const { id } = await settledBatchWithFailures();
+    await send('POST', `/batches/${id}/manual-entry`);
+
+    const { body } = await get<BatchSummary>(`/batches/${id}`);
+
+    expect(body.counts.failed).toBe(body.retryableFailures);
+    expect(body.failures.every((group) => group.retryable)).toBe(true);
+  });
+});
+
 describe('retry', () => {
   async function settledBatchWithFailures(): Promise<{ id: string; failed: DocumentSummary[] }> {
     const created = await send<BatchSummary>('POST', '/batches', {
@@ -320,6 +393,32 @@ describe('retry', () => {
     expect(body.remedy).toBeDefined();
   });
 
+  it('retries a failure from the archive itself, which belongs to no upload', async () => {
+    const { body } = await get<QueryResult>('/documents?status=failed&pageSize=50');
+    const target = body.rows.find((row) => row.errorCode && isRetryable(row.errorCode));
+    expect(target).toBeDefined();
+
+    // Nothing has been uploaded in this test, so the document has no batch to be
+    // requeued into. Refusing here would put a dead retry button on most of the
+    // failures an operator can actually see.
+    const { status } = await send<RetryResult>('POST', `/documents/${target?.id}/retry`);
+    expect(status).toBe(200);
+
+    const after = await get<DocumentDetail>(`/documents/${target?.id}`);
+    expect(after.body.status).not.toBe('failed');
+  });
+
+  it('gathers reprocessed documents into a batch that can be watched', async () => {
+    const { body } = await get<QueryResult>('/documents?status=failed&pageSize=50');
+    const target = body.rows.find((row) => row.errorCode && isRetryable(row.errorCode));
+
+    await send('POST', `/documents/${target?.id}/retry`);
+    const batches = await get<BatchSummary[]>('/batches');
+
+    expect(batches.body).toHaveLength(1);
+    expect(batches.body[0]?.total).toBe(1);
+  });
+
   it('refuses to retry a document that has not failed', async () => {
     const { body } = await get<QueryResult>('/documents?status=completed&pageSize=1');
     const { status } = await send<ApiError>('POST', `/documents/${body.rows[0]?.id}/retry`);
@@ -338,6 +437,28 @@ describe('retry', () => {
     expect(body.skipped).toBe(terminal);
   });
 
+  it('keeps the whole batch after a retry, not only what it retried', async () => {
+    const { id } = await settledBatchWithFailures();
+
+    await send('POST', `/batches/${id}/retry`, {});
+    const during = await get<BatchSummary>(`/batches/${id}`);
+    const after = await drainBatch(id);
+
+    expect(during.body.total).toBe(300);
+    expect(after.total).toBe(300);
+    expect((await get<QueryResult>(`/documents?batch=${id}&pageSize=1`)).body.total).toBe(300);
+  });
+
+  it('leaves the failures a retry cannot clear still counted', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const terminal = failed.filter((row) => row.errorCode && !isRetryable(row.errorCode)).length;
+
+    await send('POST', `/batches/${id}/retry`, {});
+    const after = await drainBatch(id);
+
+    expect(after.counts.failed).toBeGreaterThanOrEqual(terminal);
+  });
+
   it('clears failures that a second attempt resolves', async () => {
     const { id, failed } = await settledBatchWithFailures();
     const before = failed.length;
@@ -348,6 +469,50 @@ describe('retry', () => {
     const after = (await get<QueryResult>(`/documents?status=failed&batch=${id}&pageSize=200`)).body
       .total;
     expect(after).toBeLessThan(before);
+  });
+
+  it('groups the failures of a batch by cause, largest first', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const { body } = await get<BatchSummary>(`/batches/${id}`);
+
+    const counted = body.failures.reduce((running, group) => running + group.count, 0);
+    expect(counted).toBe(failed.length);
+
+    const counts = body.failures.map((group) => group.count);
+    expect(counts).toEqual([...counts].sort((a, b) => b - a));
+  });
+
+  it('reports how many failures in a batch a retry could clear', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const retryable = failed.filter((row) => row.errorCode && isRetryable(row.errorCode)).length;
+
+    const { body } = await get<BatchSummary>(`/batches/${id}`);
+
+    expect(body.retryableFailures).toBe(retryable);
+  });
+
+  it('filters documents by the cause of their failure', async () => {
+    const { id, failed } = await settledBatchWithFailures();
+    const cause = failed.find((row) => row.errorCode !== undefined)?.errorCode;
+    const expected = failed.filter((row) => row.errorCode === cause).length;
+
+    const { body } = await get<QueryResult>(
+      `/documents?batch=${id}&status=failed&cause=${cause}&pageSize=200`,
+    );
+
+    expect(body.total).toBe(expected);
+    expect(body.rows.every((row) => row.errorCode === cause)).toBe(true);
+  });
+
+  it('stops matching an old cause once a document is retried', async () => {
+    const { failed } = await settledBatchWithFailures();
+    const target = failed.find((row) => row.errorCode && isRetryable(row.errorCode));
+    const cause = target?.errorCode;
+
+    await send('POST', `/documents/${target?.id}/retry`);
+
+    const { body } = await get<QueryResult>(`/documents?cause=${cause}&pageSize=200`);
+    expect(body.rows.some((row) => row.id === target?.id)).toBe(false);
   });
 
   it('scopes a batch view to that batch alone', async () => {

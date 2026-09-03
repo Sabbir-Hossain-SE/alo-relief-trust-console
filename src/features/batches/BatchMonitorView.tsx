@@ -7,6 +7,7 @@ import { ErrorState } from '@/components/feedback/ErrorState';
 import { ProgressAnnouncer } from '@/components/feedback/ProgressAnnouncer';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { useBatch } from '@/store/polling';
+import { BatchFailures } from './components/BatchFailures';
 import { BatchMonitorPanel } from './components/BatchMonitorPanel';
 import { BatchSplit } from './components/BatchSplit';
 import { batchDocumentsHref } from './links';
@@ -53,6 +54,7 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
       <Box className="flex flex-col gap-4">
         <BatchMonitorPanel summary={data} />
         <BatchSplit summary={data} />
+        {data === undefined ? null : <BatchFailures summary={data} />}
       </Box>
 
       {data === undefined ? null : (

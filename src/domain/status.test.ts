@@ -22,6 +22,10 @@ describe('canTransition', () => {
     expect(canTransition('failed', 'processing')).toBe(true);
   });
 
+  it('lets a failure a retry cannot fix be taken on by hand', () => {
+    expect(canTransition('failed', 'needs_review')).toBe(true);
+  });
+
   it('lets a reviewed document be resolved or reprocessed', () => {
     expect(canTransition('needs_review', 'completed')).toBe(true);
     expect(canTransition('needs_review', 'processing')).toBe(true);

@@ -1,3 +1,4 @@
+import { isRetryable, type ProcessingErrorCode } from '@/domain/errors';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { ColumnStore } from '../corpus/columnStore';
 import { summaryAt } from '../corpus/documentAt';
@@ -9,9 +10,17 @@ export type Batch = {
   id: string;
   label: string;
   createdAt: number;
-  /** Documents in this batch, in the order they are worked through. */
+  /**
+   * Every document in this batch. Membership, fixed at creation.
+   *
+   * Deliberately separate from the work list below. Folding the two together
+   * meant a retry replaced the batch with just the documents being retried, and
+   * everything it had already processed silently left the batch.
+   */
   indices: Uint32Array;
-  /** How far through `indices` processing has started. */
+  /** Documents still to be worked through, in order. */
+  queue: Uint32Array;
+  /** How far through `queue` processing has started. */
   cursor: number;
   /** Document index → the time its current attempt finishes. */
   inFlight: Map<number, number>;
@@ -27,12 +36,23 @@ export type Batch = {
   settledAt: number | null;
 };
 
+/** One cause of failure within a batch, and whether a retry could clear it. */
+export type FailureGroup = {
+  code: ProcessingErrorCode;
+  count: number;
+  retryable: boolean;
+};
+
 export type BatchSummary = {
   id: string;
   label: string;
   createdAt: number;
   total: number;
   counts: Record<ProcessingStatus, number>;
+  /** Failures grouped by cause, largest first. */
+  failures: FailureGroup[];
+  /** How many of the failures a retry could plausibly clear. */
+  retryableFailures: number;
   /** True once nothing is pending or processing. */
   settled: boolean;
   /** Documents finished per second so far, or null before anything finishes. */
@@ -68,6 +88,7 @@ export function createBatch(
     label,
     createdAt,
     indices,
+    queue: indices,
     cursor: 0,
     inFlight: new Map(),
     attempts: new Map(),
@@ -79,7 +100,7 @@ export function createBatch(
 
 // Reports whether every document in the batch has reached a final state.
 export function isSettled(batch: Batch): boolean {
-  return batch.inFlight.size === 0 && batch.cursor >= batch.indices.length;
+  return batch.inFlight.size === 0 && batch.cursor >= batch.queue.length;
 }
 
 /**
@@ -158,8 +179,8 @@ function finishDue(
 
 // Moves queued documents into processing, up to the concurrency limit.
 function startPending(overlay: Overlay, batch: Batch, now: number, config: SimulatorConfig): void {
-  while (batch.inFlight.size < config.concurrency && batch.cursor < batch.indices.length) {
-    const index = batch.indices[batch.cursor] as number;
+  while (batch.inFlight.size < config.concurrency && batch.cursor < batch.queue.length) {
+    const index = batch.queue[batch.cursor] as number;
     batch.cursor += 1;
 
     const attempt = (batch.attempts.get(index) ?? 0) + 1;
@@ -185,13 +206,15 @@ export function requeue(batch: Batch, overlay: Overlay, indices: readonly number
   if (indices.length === 0) return 0;
 
   const requeued = Uint32Array.from(indices);
-  const remaining = batch.indices.subarray(batch.cursor);
+  const remaining = batch.queue.subarray(batch.cursor);
   const merged = new Uint32Array(remaining.length + requeued.length);
 
   merged.set(remaining, 0);
   merged.set(requeued, remaining.length);
 
-  batch.indices = merged;
+  // Only the work list changes. `batch.indices` is what the batch is, and a
+  // retry does not remove the documents it is not retrying.
+  batch.queue = merged;
   batch.cursor = 0;
   batch.settledAt = null;
 
@@ -220,9 +243,28 @@ export function summarizeBatch(
     number
   >;
 
+  // Grouped in the pass that is already counting statuses. A failure total on
+  // its own cannot say how many of them are worth retrying, and that is the
+  // number the retry action has to be honest about.
+  const byCause = new Map<ProcessingErrorCode, number>();
+
   for (const index of batch.indices) {
-    counts[summaryAt(store, overlay, index).status] += 1;
+    const summary = summaryAt(store, overlay, index);
+    counts[summary.status] += 1;
+
+    if (summary.status === 'failed' && summary.errorCode !== undefined) {
+      byCause.set(summary.errorCode, (byCause.get(summary.errorCode) ?? 0) + 1);
+    }
   }
+
+  const failures = [...byCause.entries()]
+    .map(([code, count]) => ({ code, count, retryable: isRetryable(code) }))
+    .sort((a, b) => b.count - a.count);
+
+  const retryableFailures = failures.reduce(
+    (running, group) => (group.retryable ? running + group.count : running),
+    0,
+  );
 
   const total = batch.indices.length;
   const settled = isSettled(batch);
@@ -236,6 +278,8 @@ export function summarizeBatch(
     createdAt: batch.createdAt,
     total,
     counts,
+    failures,
+    retryableFailures,
     settled,
     throughput,
     estimatedRemainingMs:

@@ -3,6 +3,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import { alpha } from '@mui/material/styles';
 import { describeError, isRetryable, type ProcessingErrorCode } from '@/domain/errors';
@@ -10,18 +11,28 @@ import { describeError, isRetryable, type ProcessingErrorCode } from '@/domain/e
 type FailureNoticeProps = {
   errorCode: ProcessingErrorCode;
   attempts: number;
-  onRetry?: () => void;
+  onRetry: () => void;
+  onManualEntry: () => void;
   isRetrying?: boolean;
+  isSending?: boolean;
 };
 
 /**
  * Explains a failure and offers the one action that can help.
  *
- * Retry is shown only where a second attempt could plausibly succeed. Offering
- * it on an unsupported format wastes an operator's time and hides the real
- * remedy, so those cases show the remedy instead of a button that cannot work.
+ * Retry is shown only where a second attempt could plausibly succeed. Where it
+ * cannot, the document is not a dead end either: it is handed to an operator to
+ * enter by hand, which is the real remedy rather than a button that will fail
+ * again.
  */
-export function FailureNotice({ errorCode, attempts, onRetry, isRetrying }: FailureNoticeProps) {
+export function FailureNotice({
+  errorCode,
+  attempts,
+  onRetry,
+  onManualEntry,
+  isRetrying,
+  isSending,
+}: FailureNoticeProps) {
   const spec = describeError(errorCode);
   const retryable = isRetryable(errorCode);
 
@@ -44,12 +55,12 @@ export function FailureNotice({ errorCode, attempts, onRetry, isRetrying }: Fail
 
       <Typography variant="body2">{spec.remedy}</Typography>
 
-      <Box className="flex items-center justify-between gap-2 pt-1">
+      <Box className="flex flex-wrap items-center justify-between gap-2 pt-1">
         <Typography variant="caption" sx={{ color: 'text.disabled' }}>
           {attempts === 1 ? '1 attempt' : `${attempts} attempts`}
         </Typography>
 
-        {retryable && onRetry ? (
+        {retryable ? (
           <Button
             size="small"
             variant="outlined"
@@ -60,9 +71,15 @@ export function FailureNotice({ errorCode, attempts, onRetry, isRetrying }: Fail
             Retry
           </Button>
         ) : (
-          <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-            Retrying will not help
-          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<EditNoteOutlinedIcon />}
+            onClick={onManualEntry}
+            loading={isSending}
+          >
+            Enter by hand
+          </Button>
         )}
       </Box>
     </Box>

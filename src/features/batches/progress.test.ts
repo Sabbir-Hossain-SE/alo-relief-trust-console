@@ -9,6 +9,8 @@ function summary(overrides: Partial<BatchSummary> = {}): BatchSummary {
     createdAt: 0,
     total: 100,
     counts: { pending: 40, processing: 10, completed: 40, failed: 5, needs_review: 5 },
+    failures: [{ code: 'ocr_timeout', count: 5, retryable: true }],
+    retryableFailures: 5,
     settled: false,
     throughput: 4,
     estimatedRemainingMs: 12_000,
