@@ -1,12 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useCreateBatchMutation } from '@/store/api';
 import { IndexingProgress, IngestSummary } from './components/IngestSummary';
 import { UploadDropzone } from './components/UploadDropzone';
+import { UploadQueueList } from './components/UploadQueueList';
 import { useIngest } from './useIngest';
+import { useUploadQueue } from './useUploadQueue';
 
 // Names the batch after what was dropped, so it is recognisable in a list.
 function labelFor(firstPath: string | undefined): string {
@@ -19,20 +22,33 @@ function labelFor(firstPath: string | undefined): string {
 export function UploadView() {
   const router = useRouter();
   const { state, ingestEntries, ingestFiles, cancel, reset } = useIngest();
-  const [createBatch, { isLoading: isStarting }] = useCreateBatchMutation();
+  const queue = useUploadQueue();
+  const [createBatch] = useCreateBatchMutation();
+  const [isSending, setIsSending] = useState(false);
 
   async function start() {
     if (state.status !== 'ready') return;
 
-    const batch = await createBatch({
-      label: labelFor(state.result.files[0]?.path),
-      fileCount: state.result.accepted,
-    }).unwrap();
+    setIsSending(true);
 
-    reset();
-    // The batch monitor arrives in #16; until then the batch's own filtered
-    // view is the useful destination.
-    router.push(`/documents?batch=${batch.id}`);
+    try {
+      const result = await queue.run(state.result.files);
+
+      // Only what actually arrived becomes a batch. Counting the whole
+      // selection would overstate the archive by every file that failed.
+      if (result.succeeded === 0) return;
+
+      const batch = await createBatch({
+        label: labelFor(state.result.files[0]?.path),
+        fileCount: result.succeeded,
+      }).unwrap();
+
+      reset();
+      queue.reset();
+      router.push(`/documents?batch=${batch.id}`);
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -43,9 +59,8 @@ export function UploadView() {
       />
 
       <Box className="flex flex-col gap-4">
-        {state.status !== 'ready' ? (
+        {state.status === 'idle' ? (
           <UploadDropzone
-            disabled={state.status === 'indexing'}
             onEntries={(entries) => void ingestEntries(entries)}
             onFiles={(files) => void ingestFiles(files)}
           />
@@ -55,12 +70,24 @@ export function UploadView() {
           <IndexingProgress progress={state.progress} onCancel={cancel} />
         ) : null}
 
-        {state.status === 'ready' ? (
+        {state.status === 'ready' && queue.snapshot === null ? (
           <IngestSummary
             result={state.result}
             onStart={() => void start()}
             onDiscard={reset}
-            isStarting={isStarting}
+            isStarting={isSending}
+          />
+        ) : null}
+
+        {queue.snapshot !== null ? (
+          <UploadQueueList
+            snapshot={queue.snapshot}
+            onPause={queue.pause}
+            onResume={queue.resume}
+            onCancel={() => {
+              queue.cancel();
+              queue.reset();
+            }}
           />
         ) : null}
       </Box>
