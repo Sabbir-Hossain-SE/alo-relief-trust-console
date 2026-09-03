@@ -12,12 +12,25 @@ import { z } from 'zod';
 const preferencesSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
   pageSize: z.union([z.literal(25), z.literal(50), z.literal(100)]),
+  /**
+   * Whether the navigation is reduced to an icon rail.
+   *
+   * Defaulted rather than required, so a preferences object written by a build
+   * that predates the rail still parses. Without the default the whole object
+   * would fail validation and an operator would silently lose their density and
+   * page size to gain a nav setting they never asked for.
+   */
+  navCollapsed: z.boolean().default(false),
 });
 
 export type Preferences = z.infer<typeof preferencesSchema>;
 export type GridDensity = Preferences['density'];
 
-export const DEFAULT_PREFERENCES: Preferences = { density: 'comfortable', pageSize: 50 };
+export const DEFAULT_PREFERENCES: Preferences = {
+  density: 'comfortable',
+  pageSize: 50,
+  navCollapsed: false,
+};
 
 export const PREFERENCES_STORAGE_KEY = 'alo.preferences.v1';
 
@@ -66,6 +79,9 @@ const preferencesSlice = createSlice({
     setPageSize(state, action: PayloadAction<Preferences['pageSize']>) {
       state.pageSize = action.payload;
     },
+    setNavCollapsed(state, action: PayloadAction<boolean>) {
+      state.navCollapsed = action.payload;
+    },
     // Applied after mount rather than as preloaded state, so the server and the
     // first client render agree and hydration stays clean.
     hydratePreferences(_state, action: PayloadAction<Preferences>) {
@@ -74,5 +90,6 @@ const preferencesSlice = createSlice({
   },
 });
 
-export const { setDensity, setPageSize, hydratePreferences } = preferencesSlice.actions;
+export const { setDensity, setPageSize, setNavCollapsed, hydratePreferences } =
+  preferencesSlice.actions;
 export const preferencesReducer = preferencesSlice.reducer;
