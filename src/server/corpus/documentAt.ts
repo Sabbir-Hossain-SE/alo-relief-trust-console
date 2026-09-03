@@ -35,7 +35,7 @@ function fileName(index: number, docTypeId: number, pageCount: number): string {
   return `${type}-${String(index).padStart(6, '0')}.${extension}`;
 }
 
-function errorFromId(errorId: number): ProcessingErrorCode | undefined {
+export function errorFromId(errorId: number): ProcessingErrorCode | undefined {
   if (errorId === 0) return undefined;
   return PROCESSING_ERROR_CODES[errorId - 1];
 }
@@ -108,7 +108,11 @@ export function summaryAt(store: ColumnStore, overlay: Overlay, index: number): 
     uploadedAt: store.uploadedAt[index] as number,
     personName: hasValues ? (NAME_POOL[store.nameId[index] as number] as string) : undefined,
     location: hasValues ? (LOCATION_POOL[store.locationId[index] as number] as string) : undefined,
-    errorCode: status === 'failed' ? errorCode : undefined,
+    // Also carried on a review task, because a failure handed to an operator
+    // keeps the reason it could not be extracted. Safe for generated rows: only
+    // a failed document is given an error id, and the simulator clears it on
+    // every other outcome, so an ordinary review task still reports none.
+    errorCode: status === 'failed' || status === 'needs_review' ? errorCode : undefined,
     attempts: patch?.attempts ?? (store.attempts[index] as number),
   };
 }

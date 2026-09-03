@@ -1,8 +1,9 @@
 import { HIGH_CONFIDENCE, MEDIUM_CONFIDENCE, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentSummary, type DocumentType } from '@/domain/document';
+import type { ProcessingErrorCode } from '@/domain/errors';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { ColumnStore } from './columnStore';
-import { summaryAt } from './documentAt';
+import { errorFromId, summaryAt } from './documentAt';
 import type { Overlay } from './overlay';
 import { isSearchable, resolveSearch } from './searchIndex';
 
@@ -27,6 +28,8 @@ export type DocumentQuery = {
   needsAttention?: boolean;
   /** Restricts to one upload, so a batch can link into its own failures. */
   batchId?: string;
+  /** Restricts to failures of a given cause, so a breakdown can be opened. */
+  errorCode?: readonly ProcessingErrorCode[];
   sortField?: SortField;
   sortDirection?: SortDirection;
   page?: number;
@@ -91,6 +94,7 @@ export function filterIndices(
   const types = typeMask(query.documentType);
   const bands = query.confidence && query.confidence.length > 0 ? new Set(query.confidence) : null;
   const search = isSearchable(query.search) ? resolveSearch(query.search) : null;
+  const causes = query.errorCode && query.errorCode.length > 0 ? new Set(query.errorCode) : null;
   const hasOverlay = overlay.size > 0;
 
   // Only uploaded documents carry a batch id, so a batch filter can never match
@@ -113,6 +117,17 @@ export function filterIndices(
     if (query.needsAttention === true) {
       const status = PROCESSING_STATUSES[statusId] as ProcessingStatus;
       if (status !== 'failed' && status !== 'needs_review') continue;
+    }
+
+    if (causes) {
+      // Read the same way `summaryAt` reads it: a patch may have cleared the
+      // generated error, and a retried document must not still match its old cause.
+      const code =
+        patch?.errorCode === null
+          ? undefined
+          : (patch?.errorCode ?? errorFromId(store.errorId[index] as number));
+
+      if (code === undefined || !causes.has(code)) continue;
     }
 
     if (bands && !bands.has(bandOf(store.confidence[index] as number))) continue;

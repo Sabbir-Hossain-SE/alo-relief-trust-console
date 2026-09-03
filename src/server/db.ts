@@ -130,6 +130,90 @@ export function retryDocuments(db: Database, batch: Batch, indices: readonly num
   return requeue(batch, db.overlay, indices);
 }
 
+export type ManualEntrySelection = {
+  moved: number;
+  /** Failures a retry could still clear, left alone rather than taken by hand. */
+  skipped: number;
+};
+
+/**
+ * Hands failures a retry cannot fix to an operator.
+ *
+ * The error code is kept. The document is no longer a processing failure, but
+ * why it has to be entered by hand is still the most useful thing to know about
+ * it, and discarding that would leave an unexplained review task.
+ */
+export function sendToManualEntry(db: Database, indices: readonly number[]): ManualEntrySelection {
+  let moved = 0;
+  let skipped = 0;
+
+  for (const index of indices) {
+    const summary = summaryAt(db.store, db.overlay, index);
+
+    if (summary.status !== 'failed' || summary.errorCode === undefined) {
+      skipped += 1;
+      continue;
+    }
+
+    // A retryable failure has a cheaper route out than an operator's time.
+    if (isRetryable(summary.errorCode)) {
+      skipped += 1;
+      continue;
+    }
+
+    applyPatch(db.overlay, index, { status: 'needs_review' });
+    moved += 1;
+  }
+
+  return { moved, skipped };
+}
+
+/** Owns documents reprocessed outside of any upload. */
+const REPROCESS_BATCH_ID = 'batch-reprocessing';
+
+function ensureReprocessBatch(db: Database, now: number): Batch {
+  const existing = db.batches.get(REPROCESS_BATCH_ID);
+  if (existing !== undefined) return existing;
+
+  const batch = createBatch(
+    db.overlay,
+    REPROCESS_BATCH_ID,
+    'Reprocessing',
+    new Uint32Array(0),
+    now,
+  );
+  db.batches.set(REPROCESS_BATCH_ID, batch);
+
+  return batch;
+}
+
+/**
+ * Queues documents that belong to no upload for another attempt.
+ *
+ * The archive's own failures predate every batch in the session, so there is
+ * nothing to requeue them into and a retry would have had nowhere to go. They
+ * join one reprocessing batch instead, which also gives the work somewhere to
+ * be watched rather than happening invisibly.
+ */
+export function reprocess(db: Database, indices: readonly number[], now = Date.now()): number {
+  if (indices.length === 0) return 0;
+
+  const batch = ensureReprocessBatch(db, now);
+  const known = new Set(batch.indices);
+  const fresh = indices.filter((index) => !known.has(index));
+
+  if (fresh.length > 0) {
+    const merged = new Uint32Array(batch.indices.length + fresh.length);
+    merged.set(batch.indices, 0);
+    merged.set(Uint32Array.from(fresh), batch.indices.length);
+    batch.indices = merged;
+  }
+
+  for (const index of indices) applyPatch(db.overlay, index, { batchId: batch.id });
+
+  return requeue(batch, db.overlay, indices);
+}
+
 // Finds the batch a document belongs to, if any.
 export function batchFor(db: Database, index: number): Batch | undefined {
   const batchId = detailAt(db.store, db.overlay, index).batchId;

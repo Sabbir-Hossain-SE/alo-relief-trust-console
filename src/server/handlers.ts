@@ -9,6 +9,7 @@ import {
   retryBatchSchema,
   type ApiError,
   type ArchiveSummary,
+  type ManualEntryResult,
   type RetryResult,
 } from './api-contract';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
@@ -19,8 +20,10 @@ import {
   correctDocument,
   failedIn,
   getDatabase,
+  reprocess,
   retryDocuments,
   selectRetryable,
+  sendToManualEntry,
   startBatch,
 } from './db';
 import { summarizeBatch } from './simulator/batch';
@@ -136,12 +139,41 @@ export const handlers = [
       });
     }
 
+    // The archive's own failures belong to no upload. They are reprocessed
+    // rather than refused, or every failure not from this session would carry a
+    // retry button that could never work.
     const batch = batchFor(db, index);
-    if (batch === undefined) return notFound('The batch for that document');
-
-    retryDocuments(db, batch, retryable);
+    if (batch === undefined) reprocess(db, retryable);
+    else retryDocuments(db, batch, retryable);
 
     return HttpResponse.json({ retried: retryable.length, skipped: 0 } satisfies RetryResult);
+  }),
+
+  /**
+   * Hands one failure to an operator instead of retrying it.
+   *
+   * Refused for failures a retry could still clear: an operator's time is the
+   * expensive resource, and spending it on something the pipeline would fix by
+   * itself is the wrong trade.
+   */
+  http.post(`${ROUTE}/documents/:id/manual-entry`, async ({ params }) => {
+    const db = getDatabase();
+    await delay(db.latency.write);
+
+    const index = resolveIndex(params.id);
+    if (index === null) return notFound('That document');
+
+    const { moved, skipped } = sendToManualEntry(db, [index]);
+
+    if (moved === 0) {
+      return fail(409, {
+        code: 'not_retryable',
+        message: 'That document is not waiting on manual entry.',
+        remedy: 'Only a failure that cannot be retried can be entered by hand.',
+      });
+    }
+
+    return HttpResponse.json({ moved, skipped } satisfies ManualEntryResult);
   }),
 
   /**
@@ -243,5 +275,20 @@ export const handlers = [
     retryDocuments(db, batch, retryable);
 
     return HttpResponse.json({ retried: retryable.length, skipped } satisfies RetryResult);
+  }),
+
+  // Hands every failure in a batch that a retry cannot clear to an operator.
+  http.post(`${ROUTE}/batches/:id/manual-entry`, async ({ params }) => {
+    const db = getDatabase();
+    await delay(db.latency.write);
+
+    advanceAll(db);
+
+    const batch = typeof params.id === 'string' ? db.batches.get(params.id) : undefined;
+    if (batch === undefined) return notFound('That batch');
+
+    return HttpResponse.json(
+      sendToManualEntry(db, failedIn(db, batch)) satisfies ManualEntryResult,
+    );
   }),
 ];

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DOCUMENT_TYPES, NORMALIZED_FIELD_KEYS } from '@/domain/document';
+import { PROCESSING_ERROR_CODES } from '@/domain/errors';
 import { PROCESSING_STATUSES } from '@/domain/status';
 import { SORT_FIELDS } from './corpus/query';
 
@@ -18,6 +19,7 @@ export const documentQuerySchema = z.object({
   search: z.string().optional(),
   needsAttention: z.boolean().optional(),
   batchId: z.string().min(1).max(64).optional(),
+  errorCode: z.array(z.enum(PROCESSING_ERROR_CODES)).optional(),
   sortField: z.enum(SORT_FIELDS).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
   page: z.number().int().min(0).optional(),
@@ -67,6 +69,12 @@ export type ArchiveSummary = {
   byStatus: Record<(typeof PROCESSING_STATUSES)[number], number>;
 };
 
+export type ManualEntryResult = {
+  moved: number;
+  /** Failures left alone because a retry could still clear them. */
+  skipped: number;
+};
+
 export type RetryResult = {
   retried: number;
   /** Failures a retry cannot fix, so the interface can say so rather than silently dropping them. */
@@ -84,6 +92,7 @@ export function toSearchParams(query: DocumentQueryInput): URLSearchParams {
   if (query.search) params.set('q', query.search);
   if (query.needsAttention) params.set('attention', '1');
   if (query.batchId) params.set('batch', query.batchId);
+  for (const value of query.errorCode ?? []) params.append('cause', value);
   if (query.sortField) params.set('sort', query.sortField);
   if (query.sortDirection) params.set('dir', query.sortDirection);
   if (query.page !== undefined) params.set('page', String(query.page));
@@ -109,6 +118,7 @@ export function fromSearchParams(params: URLSearchParams): DocumentQueryInput {
     search: params.get('q') ?? undefined,
     needsAttention: params.get('attention') === '1' ? true : undefined,
     batchId: params.get('batch') ?? undefined,
+    errorCode: params.getAll('cause').length > 0 ? params.getAll('cause') : undefined,
     sortField: params.get('sort') ?? undefined,
     sortDirection: params.get('dir') ?? undefined,
     page: numeric('page'),

@@ -270,6 +270,38 @@ describe('requeue', () => {
     }
   });
 
+  it('keeps every document in the batch, not only the ones retried', () => {
+    const { overlay, batch } = setup(300);
+    runToCompletion(overlay, batch);
+
+    const failed = failedIndices(overlay, batch);
+    requeue(batch, overlay, failed);
+    runToCompletion(overlay, batch);
+
+    // A retry replaced the batch with its own work list once. Everything
+    // already processed left the batch, and the summary collapsed with it.
+    expect(batch.indices.length).toBe(300);
+    expect(summarizeBatch(store, overlay, batch, T0).total).toBe(300);
+  });
+
+  it('still reports the failures it deliberately did not retry', () => {
+    const { overlay, batch } = setup(300);
+    runToCompletion(overlay, batch);
+
+    const failed = failedIndices(overlay, batch);
+    const heldBack = failed.slice(0, 2);
+    const retried = failed.slice(2);
+    expect(retried.length).toBeGreaterThan(0);
+
+    requeue(batch, overlay, retried);
+    runToCompletion(overlay, batch);
+
+    // Read through the summary, which is what the interface shows. Asserting on
+    // the overlay directly would pass even while the batch had forgotten them.
+    const summary = summarizeBatch(store, overlay, batch, T0);
+    expect(summary.counts.failed).toBeGreaterThanOrEqual(heldBack.length);
+  });
+
   it('unsettles the batch so polling resumes', () => {
     const { overlay, batch } = setup(300);
     runToCompletion(overlay, batch);

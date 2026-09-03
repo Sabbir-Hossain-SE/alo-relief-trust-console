@@ -7,6 +7,7 @@ import {
   type CorrectionInput,
   type CreateBatchInput,
   type DocumentQueryInput,
+  type ManualEntryResult,
   type RetryResult,
 } from '@/server/api-contract';
 import type { QueryResult } from '@/server/corpus/query';
@@ -69,6 +70,16 @@ export const api = createApi({
       ],
     }),
 
+    sendDocumentToManualEntry: build.mutation<ManualEntryResult, string>({
+      query: (id) => ({ url: `/documents/${id}/manual-entry`, method: 'POST' }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: 'Document', id },
+        'Document',
+        'Batch',
+        'Summary',
+      ],
+    }),
+
     getBatches: build.query<BatchSummary[], void>({
       query: () => '/batches',
       providesTags: ['Batch'],
@@ -97,6 +108,15 @@ export const api = createApi({
         'Summary',
       ],
     }),
+    sendBatchToManualEntry: build.mutation<ManualEntryResult, string>({
+      query: (id) => ({ url: `/batches/${id}/manual-entry`, method: 'POST' }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: 'Batch', id },
+        'Batch',
+        'Document',
+        'Summary',
+      ],
+    }),
   }),
 });
 
@@ -110,4 +130,6 @@ export const {
   useGetBatchQuery,
   useCreateBatchMutation,
   useRetryBatchMutation,
+  useSendDocumentToManualEntryMutation,
+  useSendBatchToManualEntryMutation,
 } = api;
