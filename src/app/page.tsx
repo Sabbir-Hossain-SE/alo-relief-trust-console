@@ -1,6 +1,8 @@
+import Box from '@mui/material/Box';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LinkButton } from '@/components/ui/LinkButton';
+import { AnalyticsPanel } from '@/features/overview/AnalyticsPanel';
 import { ArchiveSummaryPanel } from '@/features/overview/ArchiveSummaryPanel';
 
 export default function OverviewPage() {
@@ -17,6 +19,10 @@ export default function OverviewPage() {
       />
 
       <ArchiveSummaryPanel />
+
+      <Box className="mt-8">
+        <AnalyticsPanel />
+      </Box>
     </>
   );
 }

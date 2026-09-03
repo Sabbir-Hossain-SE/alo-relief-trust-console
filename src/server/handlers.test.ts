@@ -1,7 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentDetail, DocumentSummary } from '@/domain/document';
 import { isRetryable } from '@/domain/errors';
-import type { ApiError, ArchiveSummary, ManualEntryResult, RetryResult } from './api-contract';
+import type {
+  ApiError,
+  ArchiveAnalytics,
+  ArchiveSummary,
+  ManualEntryResult,
+  RetryResult,
+} from './api-contract';
 import { resetDatabase } from './db';
 import { server } from './node';
 import type { BatchSummary } from './simulator/batch';
@@ -566,5 +572,110 @@ describe('retry', () => {
 
   it('returns nothing for a batch that has no documents', async () => {
     expect((await get<QueryResult>('/documents?batch=batch-999')).body.total).toBe(0);
+  });
+});
+
+describe('GET /analytics', () => {
+  it('breaks the archive down without losing a document', async () => {
+    const { status, body } = await get<ArchiveAnalytics>('/analytics');
+    const sum = (counts: Record<string, number>) =>
+      Object.values(counts).reduce((total, count) => total + count, 0);
+
+    expect(status).toBe(200);
+    expect(body.total).toBe(400);
+    expect(sum(body.byStatus)).toBe(400);
+    expect(sum(body.byType)).toBe(400);
+  });
+
+  // Two figures for the same archive on the same screen must not disagree.
+  it('agrees with the summary endpoint', async () => {
+    const summary = await get<ArchiveSummary>('/summary');
+    const analytics = await get<ArchiveAnalytics>('/analytics');
+
+    expect(analytics.body.byStatus).toEqual(summary.body.byStatus);
+    expect(analytics.body.total).toBe(summary.body.total);
+  });
+
+  it('reports confidence over extracted documents only', async () => {
+    const { body } = await get<ArchiveAnalytics>('/analytics');
+
+    expect(body.extracted).toBe(body.byStatus.completed + body.byStatus.needs_review);
+    expect(body.averageConfidence).toBeGreaterThan(0);
+    expect(body.averageConfidence).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('GET /documents/export', () => {
+  async function exportCsv(
+    query = '',
+  ): Promise<{ status: number; headers: Headers; text: string }> {
+    const response = await fetch(`${BASE}/documents/export${query}`);
+    return { status: response.status, headers: response.headers, text: await response.text() };
+  }
+
+  /** Data rows, without the header and the trailing blank. */
+  function dataRows(text: string): string[] {
+    return text.split('\r\n').slice(1, -1);
+  }
+
+  it('serves the whole archive as a downloadable csv', async () => {
+    const { status, headers, text } = await exportCsv();
+
+    expect(status).toBe(200);
+    expect(headers.get('content-type')).toContain('text/csv');
+    expect(headers.get('content-disposition')).toMatch(/^attachment; filename=".+\.csv"$/);
+    expect(dataRows(text)).toHaveLength(400);
+  });
+
+  // The route sits above `/documents/:id`, which would otherwise read `export`
+  // as a document id and answer 404.
+  it('is not swallowed by the document-by-id route', async () => {
+    const { status } = await exportCsv();
+    const missing = await get<ApiError>('/documents/ARC-999999');
+
+    expect(status).toBe(200);
+    expect(missing.status).toBe(404);
+  });
+
+  it('exports the filtered view rather than the whole archive', async () => {
+    const failed = await get<QueryResult>('/documents?status=failed&pageSize=1');
+    const { headers, text } = await exportCsv('?status=failed');
+
+    expect(dataRows(text)).toHaveLength(failed.body.total);
+    expect(headers.get('x-total-count')).toBe(String(failed.body.total));
+  });
+
+  it('exports in the order the grid was showing', async () => {
+    const query = '?sort=confidence&dir=asc';
+    const page = await get<QueryResult>(`/documents${query}&pageSize=5`);
+    const { text } = await exportCsv(query);
+
+    expect(
+      dataRows(text)
+        .slice(0, 5)
+        .map((row) => row.split(',')[0]),
+    ).toEqual(page.body.rows.map((row) => row.id));
+  });
+
+  it('writes a header-only file when the filter matches nothing', async () => {
+    const { text, headers } = await exportCsv('?q=zzzzz-no-such-record');
+
+    expect(dataRows(text)).toHaveLength(0);
+    expect(headers.get('x-total-count')).toBe('0');
+    expect(text.split('\r\n')[0]).toContain('ID');
+  });
+
+  it('carries an operator correction into the file', async () => {
+    const queue = await get<QueryResult>('/documents?status=needs_review&pageSize=1');
+    const target = queue.body.rows[0] as DocumentSummary;
+
+    await send<DocumentDetail>('PATCH', `/documents/${target.id}`, {
+      corrections: [{ field: 'personName', value: 'Rahima Khatun' }],
+    });
+
+    const { text } = await exportCsv();
+    const row = dataRows(text).find((line) => line.startsWith(target.id));
+
+    expect(row).toContain('Rahima Khatun');
   });
 });

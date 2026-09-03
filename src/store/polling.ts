@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { DocumentQueryInput } from '@/server/api-contract';
 import {
+  useGetAnalyticsQuery,
   useGetBatchQuery,
   useGetBatchesQuery,
   useGetDocumentsQuery,
@@ -65,6 +66,15 @@ export function useSummary() {
   const changing = useArchiveIsChanging();
 
   return useGetSummaryQuery(undefined, {
+    pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+  });
+}
+
+/** The archive breakdowns, on the same terms as the counts they sit beside. */
+export function useAnalytics() {
+  const changing = useArchiveIsChanging();
+
+  return useGetAnalyticsQuery(undefined, {
     pollingInterval: changing ? POLL_INTERVAL_MS : 0,
   });
 }

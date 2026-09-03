@@ -12,6 +12,19 @@ import { SORT_FIELDS } from './corpus/query';
 
 export const API_BASE = '/api';
 
+/**
+ * Resolves an API path to an absolute URL.
+ *
+ * Always absolute. Node's fetch rejects a relative URL outright, and jsdom
+ * leaves the global fetch in place, so a relative path works in the browser and
+ * fails in tests. Resolving against the current origin keeps requests
+ * same-origin for the service worker and valid for Node.
+ */
+export function apiUrl(path = ''): string {
+  const origin = typeof location === 'undefined' ? 'http://localhost' : location.origin;
+  return `${origin}${API_BASE}${path}`;
+}
+
 export const documentQuerySchema = z.object({
   status: z.array(z.enum(PROCESSING_STATUSES)).optional(),
   documentType: z.array(z.enum(DOCUMENT_TYPES)).optional(),
@@ -81,6 +94,8 @@ export type ArchiveSummary = {
   total: number;
   byStatus: Record<(typeof PROCESSING_STATUSES)[number], number>;
 };
+
+export type { ArchiveAnalytics } from './corpus/analytics';
 
 export type ManualEntryResult = {
   moved: number;

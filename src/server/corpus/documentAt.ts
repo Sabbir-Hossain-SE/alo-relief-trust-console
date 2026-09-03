@@ -10,7 +10,7 @@ import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { ExtractedField } from '@/domain/field';
 import { assertInRange, type ColumnStore } from './columnStore';
 import { generateCore, FIELD_COUNT } from './generate';
-import { readPatch, type Overlay } from './overlay';
+import { readPatch, type DocumentPatch, type Overlay } from './overlay';
 import { LOCATION_POOL, NAME_POOL, PROGRAM_POOL } from './pools.generated';
 
 const FILE_EXTENSIONS = ['pdf', 'jpg', 'png', 'tiff'] as const;
@@ -82,6 +82,23 @@ function buildFields(index: number, seed: number, status: ProcessingStatus): Nor
   return record;
 }
 
+/**
+ * Prefers an operator's correction over the generated value.
+ *
+ * The presence of the field in the patch is what decides, not its value: an
+ * operator who clears a field is asserting the page holds nothing there, which
+ * is a different statement from never having corrected it. Falling back on a
+ * truthy check would quietly restore the pipeline's guess.
+ */
+function corrected(
+  patch: DocumentPatch | undefined,
+  key: 'personName' | 'location',
+  generated: string,
+): string | undefined {
+  const field = patch?.fields?.[key];
+  return field === undefined ? generated : field.value;
+}
+
 /** Reads the grid row for a document, with any recorded changes applied. */
 export function summaryAt(store: ColumnStore, overlay: Overlay, index: number): DocumentSummary {
   assertInRange(store, index);
@@ -106,8 +123,15 @@ export function summaryAt(store: ColumnStore, overlay: Overlay, index: number): 
     status,
     confidence: store.confidence[index] as number,
     uploadedAt: store.uploadedAt[index] as number,
-    personName: hasValues ? (NAME_POOL[store.nameId[index] as number] as string) : undefined,
-    location: hasValues ? (LOCATION_POOL[store.locationId[index] as number] as string) : undefined,
+    // Corrections have to reach the row, not only the drawer: the grid, the
+    // review queue and the CSV export all read a summary, and a record that
+    // reads one way when open and another when closed is not one record.
+    personName: hasValues
+      ? corrected(patch, 'personName', NAME_POOL[store.nameId[index] as number] as string)
+      : undefined,
+    location: hasValues
+      ? corrected(patch, 'location', LOCATION_POOL[store.locationId[index] as number] as string)
+      : undefined,
     // Also carried on a review task, because a failure handed to an operator
     // keeps the reason it could not be extracted. Safe for generated rows: only
     // a failed document is given an error id, and the simulator clears it on

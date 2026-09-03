@@ -195,3 +195,62 @@ describe('detailAt', () => {
     expect(detailAt(store, empty, 77)).toEqual(detailAt(store, empty, 77));
   });
 });
+
+describe('summaryAt over a corrected record', () => {
+  /**
+   * The grid, the review queue and the CSV export all read a summary while the
+   * drawer reads a detail. When only the detail applied corrections, a record
+   * an operator had just fixed still showed the pipeline's value in the row
+   * behind the drawer they fixed it in.
+   */
+  it('shows the corrected value, not the generated one', () => {
+    const overlay = createOverlay();
+    const index = firstWithStatus('needs_review');
+    const generated = summaryAt(store, empty, index);
+
+    applyPatch(overlay, index, {
+      fields: { personName: { value: 'Rahima Khatun', confidence: 1, source: 'manual' } },
+    });
+
+    expect(generated.personName).not.toBe('Rahima Khatun');
+    expect(summaryAt(store, overlay, index).personName).toBe('Rahima Khatun');
+  });
+
+  it('agrees with the detail view of the same document', () => {
+    const overlay = createOverlay();
+    const index = firstWithStatus('needs_review');
+
+    applyPatch(overlay, index, {
+      fields: { location: { value: 'Cox\u2019s Bazar', confidence: 1, source: 'manual' } },
+    });
+
+    const summary = summaryAt(store, overlay, index);
+    const detail = detailAt(store, overlay, index);
+
+    expect(summary.location).toBe(detail.fields.location.value);
+  });
+
+  // Clearing a field is a claim that the page holds nothing there, which is a
+  // different statement from never having corrected it.
+  it('keeps a field an operator cleared cleared', () => {
+    const overlay = createOverlay();
+    const index = firstWithStatus('needs_review');
+
+    applyPatch(overlay, index, {
+      fields: { personName: { confidence: 1, source: 'manual' } },
+    });
+
+    expect(summaryAt(store, overlay, index).personName).toBeUndefined();
+  });
+
+  it('leaves an uncorrected field on the generated value', () => {
+    const overlay = createOverlay();
+    const index = firstWithStatus('needs_review');
+
+    applyPatch(overlay, index, {
+      fields: { personName: { value: 'Rahima Khatun', confidence: 1, source: 'manual' } },
+    });
+
+    expect(summaryAt(store, overlay, index).location).toBe(summaryAt(store, empty, index).location);
+  });
+});

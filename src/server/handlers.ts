@@ -8,12 +8,15 @@ import {
   fromSearchParams,
   retryBatchSchema,
   type ApiError,
+  type ArchiveAnalytics,
   type ArchiveSummary,
   type ManualEntryResult,
   type RetryResult,
 } from './api-contract';
+import { analyzeArchive } from './corpus/analytics';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
-import { countByStatus, queryDocuments } from './corpus/query';
+import { documentsToCsv, exportFileName } from './corpus/exportCsv';
+import { countByStatus, filterIndices, queryDocuments, sortIndices } from './corpus/query';
 import {
   advanceAll,
   batchFor,
@@ -67,6 +70,15 @@ export const handlers = [
     return HttpResponse.json(summary);
   }),
 
+  http.get(`${ROUTE}/analytics`, async () => {
+    const db = getDatabase();
+    await delay(db.latency.read);
+
+    advanceAll(db);
+
+    return HttpResponse.json(analyzeArchive(db.store, db.overlay) satisfies ArchiveAnalytics);
+  }),
+
   http.get(`${ROUTE}/documents`, async ({ request }) => {
     const db = getDatabase();
     await delay(db.latency.read);
@@ -76,6 +88,40 @@ export const handlers = [
     const query = fromSearchParams(new URL(request.url).searchParams);
 
     return HttpResponse.json(queryDocuments(db.store, db.overlay, query));
+  }),
+
+  /**
+   * Renders the current view as a CSV file.
+   *
+   * Registered above `/documents/:id`, which would otherwise match `export` as
+   * a document id and answer 404. Takes the same query parameters as the grid,
+   * so what is exported is exactly what is on screen rather than a second
+   * definition of the same filter.
+   */
+  http.get(`${ROUTE}/documents/export`, async ({ request }) => {
+    const db = getDatabase();
+    await delay(db.latency.read);
+
+    advanceAll(db);
+
+    const query = fromSearchParams(new URL(request.url).searchParams);
+    const matched = filterIndices(db.store, db.overlay, query);
+    const ordered = sortIndices(
+      db.store,
+      matched,
+      query.sortField ?? 'uploadedAt',
+      query.sortDirection ?? 'desc',
+    );
+
+    return new HttpResponse(documentsToCsv(db.store, db.overlay, ordered), {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="${exportFileName()}"`,
+        // The count the interface reports, without the client having to parse
+        // the file to find out how many rows it got.
+        'x-total-count': String(ordered.length),
+      },
+    });
   }),
 
   http.get(`${ROUTE}/documents/:id`, async ({ params }) => {
