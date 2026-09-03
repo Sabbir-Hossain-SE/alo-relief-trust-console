@@ -26,6 +26,7 @@ pnpm test:coverage  # the same, with coverage thresholds enforced
 pnpm e2e            # 11 Playwright flows against a production build
                     # first run: pnpm exec playwright install chromium
 pnpm bench          # the performance numbers quoted below
+pnpm screenshots    # recapture the images below, against a running build
 pnpm typecheck      # next typegen && tsc --noEmit
 pnpm lint
 pnpm build
@@ -322,6 +323,9 @@ Verified by keyboard and by reading the accessibility tree, not asserted:
   stopping — this app shipped that bug until the accessibility pass caught it. The preference
   is also read in JavaScript and used to build the theme, because MUI times its enter and exit
   callbacks with `setTimeout` and no stylesheet can reach those.
+- **The collapsed rail keeps its labels.** They are hidden visually rather than removed, so five
+  links are not left named by an icon alone; a tooltip carries the same word for everyone else,
+  and the toggle reports `aria-expanded` against the rail it controls.
 - **Virtualized lists state their real size and keep one roving tab stop.** Only about twenty
   rows of a 200-record queue exist in the DOM, so `aria-setsize` reports the true count, and
   the arrow keys move focus through every item rather than tabbing off the end of the window.
@@ -432,3 +436,14 @@ high-volume work for hours.
 Fraunces for display figures, Inter for the interface, JetBrains Mono with tabular figures for
 identifiers and counts so numbers do not jitter as they tick up. Motion is slow, and only ever
 communicates a state change.
+
+The shell is one bar across the full width, with a navigation rail beneath it. The brand and the
+control that collapses the rail belong to the application rather than to any page, so they stay
+in one place while the rail narrows underneath them. Collapsing it to icons is a preference, not
+view state — it is about the operator rather than the screen, so it persists across a reload
+instead of living in the URL, and it sits alongside the grid's density toggle for the same
+reason: operators differ, and a 100,000-row table is worth 176 pixels to some of them and not to
+others.
+
+The screenshots below are captured by `pnpm screenshots` rather than by hand, because an image
+of a screen that no longer exists is a claim the README is making and getting wrong.
