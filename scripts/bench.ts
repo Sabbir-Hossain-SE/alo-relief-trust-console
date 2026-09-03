@@ -13,6 +13,16 @@ import { DEFAULT_ARCHIVE_SIZE, DEFAULT_SEED } from '../src/server/corpus/config'
 const SIZE = Number(process.argv[2]) || DEFAULT_ARCHIVE_SIZE;
 const OBJECT_SAMPLE = 20_000;
 
+/**
+ * The heap comparison is repeated because it is genuinely noisy.
+ *
+ * `heapUsed` moves with whatever else the process allocated or collected
+ * between two readings, and a single run swung between 25x and 38x. The median
+ * of several is stable; the spread is printed so the figure is honest about its
+ * own precision rather than quoting the flattering run.
+ */
+const OBJECT_REPEATS = 5;
+
 // Times a call and hands its result back, so timings never need a mutable outer.
 function time<T>(label: string, run: () => T): T {
   const start = performance.now();
@@ -100,21 +110,36 @@ async function main(): Promise<void> {
 
   // Measured rather than estimated: hold a real sample so it cannot be
   // collected, then extrapolate from the heap delta.
-  await settle();
-  const before = process.memoryUsage().heapUsed;
-  const retained = Array.from({ length: OBJECT_SAMPLE }, (_, i) => detailAt(store, overlay, i));
-  await settle();
-  const perObject = (process.memoryUsage().heapUsed - before) / retained.length;
+  const samples: number[] = [];
+
+  for (let run = 0; run < OBJECT_REPEATS; run += 1) {
+    await settle();
+    const before = process.memoryUsage().heapUsed;
+    const retained = Array.from({ length: OBJECT_SAMPLE }, (_, i) => detailAt(store, overlay, i));
+    await settle();
+    // Read the heap before `retained` can go out of scope, or the sample is of
+    // memory the engine has already reclaimed.
+    samples.push((process.memoryUsage().heapUsed - before) / retained.length);
+  }
+
+  const sorted = [...samples].sort((a, b) => a - b);
+  const perObject = sorted[Math.floor(sorted.length / 2)] as number;
   const asObjects = perObject * SIZE;
+  const bytes = storeBytes(store);
+  const low = ((sorted[0] as number) * SIZE) / bytes;
+  const high = ((sorted[sorted.length - 1] as number) * SIZE) / bytes;
 
   console.log('');
   console.log(`  ${'column store (exact)'.padEnd(38)} ${mb(storeBytes(store)).padStart(11)}`);
   console.log(
     `  ${'bytes per document'.padEnd(38)} ${(storeBytes(store) / SIZE).toFixed(1).padStart(8)} B`,
   );
-  console.log(`  ${'same archive as objects (measured)'.padEnd(38)} ${mb(asObjects).padStart(11)}`);
   console.log(
-    `  ${'reduction'.padEnd(38)} ${(asObjects / storeBytes(store)).toFixed(0).padStart(9)}x`,
+    `  ${`same archive as objects (median of ${OBJECT_REPEATS})`.padEnd(38)} ${mb(asObjects).padStart(11)}`,
+  );
+  console.log(
+    `  ${'reduction'.padEnd(38)} ${(asObjects / bytes).toFixed(0).padStart(9)}x` +
+      `   (${low.toFixed(0)}-${high.toFixed(0)}x across runs)`,
   );
   console.log('');
 }
