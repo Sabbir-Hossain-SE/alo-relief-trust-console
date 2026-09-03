@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { AppShell } from '@/components/layout/AppShell';
-import { MockApiProvider } from '@/server/MockApiProvider';
+import { MockApiGate, MockApiProvider } from '@/server/MockApiProvider';
 import { StoreProvider } from '@/store/StoreProvider';
 import { ThemeRegistry } from '@/theme/ThemeRegistry';
 import './globals.css';
@@ -39,9 +39,11 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         <InitColorSchemeScript attribute="class" defaultMode="system" />
         <ThemeRegistry>
           <StoreProvider>
-            <AppShell>
-              <MockApiProvider>{children}</MockApiProvider>
-            </AppShell>
+            <MockApiProvider>
+              <AppShell>
+                <MockApiGate>{children}</MockApiGate>
+              </AppShell>
+            </MockApiProvider>
           </StoreProvider>
         </ThemeRegistry>
       </body>

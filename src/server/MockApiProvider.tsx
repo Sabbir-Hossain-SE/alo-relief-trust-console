@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
@@ -9,14 +9,20 @@ import { startMockApi } from './browser';
 
 type BootState = 'starting' | 'ready' | 'failed';
 
+const BootContext = createContext<BootState>('starting');
+
 /**
- * Holds page content back until the mock backend is intercepting.
+ * Reports whether the mock backend is intercepting yet.
  *
- * Requests issued before the service worker activates fall straight through to
- * a real 404, which surfaces as a confusing empty screen on first load. The
- * navigation renders immediately regardless, so only the data-backed region
- * waits.
+ * Anything that fetches from outside the gated region — the shell's own batch
+ * bar, for one — has to wait for this. A request issued earlier passes straight
+ * through the service worker and comes back as a real 404.
  */
+export function useMockApiReady(): boolean {
+  return useContext(BootContext) === 'ready';
+}
+
+/** Starts the mock backend once and publishes how far along it is. */
 export function MockApiProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BootState>('starting');
 
@@ -36,6 +42,18 @@ export function MockApiProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  return <BootContext.Provider value={state}>{children}</BootContext.Provider>;
+}
+
+/**
+ * Holds data-backed content back until the mock backend is intercepting.
+ *
+ * Only the page waits. The navigation and the shell render immediately, so the
+ * first paint is the application rather than a full-screen spinner.
+ */
+export function MockApiGate({ children }: { children: ReactNode }) {
+  const state = useContext(BootContext);
 
   if (state === 'failed') {
     return (

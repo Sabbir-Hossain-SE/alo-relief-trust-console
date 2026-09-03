@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { batchHref } from '@/features/batches/links';
 import { useCreateBatchMutation } from '@/store/api';
 import { IndexingProgress, IngestSummary } from './components/IngestSummary';
 import { UploadDropzone } from './components/UploadDropzone';
@@ -45,7 +46,9 @@ export function UploadView() {
 
       reset();
       queue.reset();
-      router.push(`/documents?batch=${batch.id}`);
+      // Straight to the monitor, not the grid: the next thing that matters is
+      // whether processing succeeds, and the grid cannot show that as a whole.
+      router.push(batchHref(batch.id));
     } finally {
       setIsSending(false);
     }
