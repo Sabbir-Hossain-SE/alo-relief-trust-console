@@ -116,8 +116,7 @@ describe('tag invalidation', () => {
     await run(
       api.endpoints.correctDocument.initiate({
         id: target?.id ?? '',
-        field: 'personName',
-        value: 'Corrected Name',
+        corrections: [{ field: 'personName', value: 'Corrected Name' }],
       }),
     );
     await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));

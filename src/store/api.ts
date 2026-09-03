@@ -4,7 +4,7 @@ import {
   API_BASE,
   toSearchParams,
   type ArchiveSummary,
-  type CorrectionInput,
+  type CorrectionsInput,
   type CreateBatchInput,
   type DocumentQueryInput,
   type ManualEntryResult,
@@ -49,7 +49,7 @@ export const api = createApi({
       providesTags: (_result, _error, id) => [{ type: 'Document', id }],
     }),
 
-    correctDocument: build.mutation<DocumentDetail, { id: string } & CorrectionInput>({
+    correctDocument: build.mutation<DocumentDetail, { id: string } & CorrectionsInput>({
       query: ({ id, ...body }) => ({ url: `/documents/${id}`, method: 'PATCH', body }),
       // A correction can resolve the review that put the document in the queue,
       // so the list and the counts both change, not just this record.
