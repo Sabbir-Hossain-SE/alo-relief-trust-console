@@ -39,7 +39,9 @@ export function FailureNotice({
   return (
     <Box
       className="flex flex-col gap-2 rounded-lg p-3"
-      role="alert"
+      // Not an alert. It describes the record being read rather than reporting
+      // an event, and asserting it would interrupt the reader every time a
+      // failed document is opened. Actions announce themselves separately.
       sx={(theme) => ({
         backgroundColor: alpha(theme.palette.status.failed.fill, 0.1),
         border: `1px solid ${alpha(theme.palette.status.failed.fill, 0.3)}`,

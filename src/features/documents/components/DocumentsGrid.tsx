@@ -110,10 +110,22 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
         disableColumnFilter
         disableRowSelectionOnClick
         onRowClick={onOpen === undefined ? undefined : ({ row }) => onOpen(row)}
+        // The grid publishes `onRowClick` from the row's DOM click alone, and
+        // its own Enter handling is reserved for cell editing. Without this the
+        // only way into a document is a mouse, on the screen the archive is
+        // mostly worked from.
+        onCellKeyDown={
+          onOpen === undefined
+            ? undefined
+            : (params, event) => {
+                if (event.key !== 'Enter') return;
+                event.defaultMuiPrevented = true;
+                onOpen(params.row);
+              }
+        }
         sx={{
           border: 0,
           '& .MuiDataGrid-row': { cursor: onOpen === undefined ? 'default' : 'pointer' },
-          '& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within': { outline: 'none' },
         }}
         aria-label="Documents in the archive"
       />

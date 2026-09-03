@@ -25,7 +25,7 @@ export function StateView({ icon, title, description, action, tone = 'neutral' }
         </Box>
       ) : null}
 
-      <Typography variant="h3" component="p">
+      <Typography variant="h3" component="h2">
         {title}
       </Typography>
 

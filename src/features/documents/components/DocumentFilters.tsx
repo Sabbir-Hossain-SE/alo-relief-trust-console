@@ -99,9 +99,15 @@ export function DocumentFilters({ query, isFiltered, onChange, onClear }: Docume
             />
           );
         })}
+      </Box>
 
-        <Box className="mx-1 h-5 w-px" sx={{ backgroundColor: 'divider' }} aria-hidden />
-
+      {/* Its own group. These sat inside "Filter by status", so every
+          confidence chip was announced as a status filter. */}
+      <Box
+        className="flex flex-wrap items-center gap-1.5"
+        role="group"
+        aria-label="Filter by confidence"
+      >
         {BANDS.map((band) => {
           const selected = query.confidence?.includes(band) ?? false;
 

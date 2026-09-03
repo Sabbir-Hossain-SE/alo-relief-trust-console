@@ -43,7 +43,14 @@ export function FieldValue<T>({ field, format, mono = false }: FieldValueProps<T
 
       {isManual ? (
         <Tooltip title={SOURCE_LABELS.manual}>
-          <PersonOutlinedIcon fontSize="small" sx={{ color: 'primary.main' }} />
+          <Box
+            component="span"
+            className="inline-flex"
+            role="img"
+            aria-label={SOURCE_LABELS.manual}
+          >
+            <PersonOutlinedIcon fontSize="small" sx={{ color: 'primary.main' }} />
+          </Box>
         </Tooltip>
       ) : (
         <ConfidenceMeter score={field.confidence} showLabel={false} />

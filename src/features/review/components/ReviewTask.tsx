@@ -7,6 +7,7 @@ import { alpha } from '@mui/material/styles';
 import { ConfidenceMeter } from '@/components/data/ConfidenceMeter';
 import { DOCUMENT_TYPE_LABELS, type DocumentSummary } from '@/domain/document';
 import { formatDate } from '@/lib/format/date';
+import type { VirtualRowProps } from '@/components/data/VirtualList';
 
 export const TASK_HEIGHT = 76;
 
@@ -14,6 +15,8 @@ type ReviewTaskProps = {
   row: DocumentSummary;
   isOpen: boolean;
   onOpen: () => void;
+  /** The list owns the tab stop, so the row takes its focusability from it. */
+  rowProps: VirtualRowProps;
 };
 
 /**
@@ -23,9 +26,10 @@ type ReviewTaskProps = {
  * button is reachable and operable from a keyboard without anything being
  * reimplemented.
  */
-export function ReviewTask({ row, isOpen, onOpen }: ReviewTaskProps) {
+export function ReviewTask({ row, isOpen, onOpen, rowProps }: ReviewTaskProps) {
   return (
     <ButtonBase
+      {...rowProps}
       onClick={onOpen}
       aria-label={`Review ${row.fileName}`}
       className="flex w-full items-center gap-4 px-4 text-left"

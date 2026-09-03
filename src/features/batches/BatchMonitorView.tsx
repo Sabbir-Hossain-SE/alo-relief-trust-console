@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { ErrorState } from '@/components/feedback/ErrorState';
-import { ProgressAnnouncer } from '@/components/feedback/ProgressAnnouncer';
+import { ProgressAnnouncer, decile } from '@/components/feedback/ProgressAnnouncer';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { useBatch } from '@/store/polling';
 import { BatchFailures } from './components/BatchFailures';
@@ -59,9 +59,9 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
 
       {data === undefined ? null : (
         <ProgressAnnouncer
-          completion={batchProgress(data).completion}
+          step={decile(batchProgress(data).completion)}
           message={progressMessage(data)}
-          settled={data.settled}
+          final={data.settled}
         />
       )}
     </>
