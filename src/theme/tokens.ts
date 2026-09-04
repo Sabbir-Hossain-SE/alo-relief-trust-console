@@ -31,6 +31,22 @@ export const brand = {
 } as const;
 
 /**
+ * The logo: a sun rising over a horizon, which doubles as the edge of a page.
+ *
+ * Only the horizon changes between schemes, and it is the part that carries the
+ * mark: 14:1 on paper and 16:1 in the dark. The sun stays the same in both — at
+ * 1.8:1 on paper it is decoration rather than a graphic conveying anything, the
+ * same trade `accent` already records, and inverting it would cost the mark its
+ * identity to fix a threshold it is not held to.
+ */
+export const brandMark = {
+  ray: '#E9A147',
+  coreTop: '#F4B15E',
+  coreBottom: '#E08A2E',
+  horizon: { light: '#2A2622', dark: '#F7F5F1' },
+} as const;
+
+/**
  * Two tones per status. `fill` keeps the desaturated hue so a grid full of them
  * reads as calm rather than as an incident board; `ink` is the same hue pushed
  * far enough to clear 4.5:1 for label text. The original single-tone palette

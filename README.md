@@ -26,6 +26,8 @@ pnpm test:coverage  # the same, with coverage thresholds enforced
 pnpm e2e            # 11 Playwright flows against a production build
                     # first run: pnpm exec playwright install chromium
 pnpm bench          # the performance numbers quoted below
+pnpm screenshots    # recapture the images below, against a running build
+pnpm icons          # re-render the raster icons from src/app/icon.svg
 pnpm typecheck      # next typegen && tsc --noEmit
 pnpm lint
 pnpm build
@@ -322,6 +324,9 @@ Verified by keyboard and by reading the accessibility tree, not asserted:
   stopping — this app shipped that bug until the accessibility pass caught it. The preference
   is also read in JavaScript and used to build the theme, because MUI times its enter and exit
   callbacks with `setTimeout` and no stylesheet can reach those.
+- **The collapsed rail keeps its labels.** They are hidden visually rather than removed, so five
+  links are not left named by an icon alone; a tooltip carries the same word for everyone else,
+  and the toggle reports `aria-expanded` against the rail it controls.
 - **Virtualized lists state their real size and keep one roving tab stop.** Only about twenty
   rows of a 200-record queue exist in the DOM, so `aria-setsize` reports the true count, and
   the arrow keys move focus through every item rather than tabbing off the end of the window.
@@ -429,6 +434,55 @@ Bengali for **light**, and these are not server logs — they are enrollment for
 intake sheets and ID scans belonging to real people, handled by an operator doing patient,
 high-volume work for hours.
 
-Fraunces for display figures, Inter for the interface, JetBrains Mono with tabular figures for
-identifiers and counts so numbers do not jitter as they tick up. Motion is slow, and only ever
-communicates a state change.
+Inter for the whole interface — headings included — with JetBrains Mono and tabular figures for
+identifiers, counts and timestamps so numbers do not jitter as they tick up. Fraunces is still
+loaded and appears in exactly one place: the wordmark, which is a logo rather than a heading.
+One family for the interface means the hierarchy has to come from size, weight and tracking, so
+the headings carry negative letter-spacing that tightens as they grow — Inter left at its
+default spacing reads as loose beside 14px body text, which is how a single-family scale ends up
+looking accidental rather than chosen.
+
+The chrome is deliberately quiet: 28px page title, 20px section heading, 16px card title. This
+is a screen worked for hours, and a banner across the top of it earns nothing. **Figures are not
+headings** and have their own two sizes — the archive total at 40px, the counts at 28px. They
+were set in `h1` and `h2` until the headings came down, which had tied the size of the number
+being read to the size of the label above it.
+
+Motion is slow, and only ever communicates a state change.
+
+Spacing has one owner per level. `PageSections` sets the distance between a page's top-level
+blocks and `SECTION_CONTENT_GAP` the distance inside one, at half of it, so "these belong
+together" and "these are separate things" read as different distances. The alternative — a
+bottom margin on the header, another on one panel, a top margin on the next — is how a page ends
+up with four gaps that all look like mistakes, which is what this one had.
+
+Both scrolling regions are sized in whole rows. A fixed height cuts the last row in half
+wherever it happens to land, which reads as a rendering fault rather than as a scroll
+affordance; in the grid it also moved with the density toggle, so it could not be corrected with
+one number.
+
+The mark is a sun rising over a horizon that doubles as the edge of a page. Only the horizon
+follows the theme — through the palette, so it tracks the in-app toggle rather than only the
+operating system's setting. The sun stays the same in both, because it reads on either ground
+and inverting it would cost the mark its identity to fix a contrast threshold it is not held to:
+it is decoration, hidden from assistive technology, and the horizon at 14:1 is what carries the
+drawing.
+
+The favicon is the same drawing again, and it is the one surface the theme toggle cannot reach —
+a browser tab strip belongs to the browser. So `icon.svg` carries its own
+`prefers-color-scheme` rule and follows the operating system instead. The `.ico` and the Apple
+icon cannot carry a media query at all, so both are rendered with the light horizon; every
+browser that supports an SVG icon prefers it, which is nearly all of them.
+
+The shell is one bar across the full width, with a navigation rail beneath it. The brand and the
+control that collapses the rail belong to the application rather than to any page, so they stay
+in one place while the rail narrows underneath them. Collapsing it to icons is a preference, not
+view state — it is about the operator rather than the screen, so it persists across a reload
+instead of living in the URL, and it sits alongside the grid's density toggle for the same
+reason: operators differ, and a 100,000-row table is worth 176 pixels to some of them and not to
+others.
+
+The screenshots below are captured by `pnpm screenshots` rather than by hand, because an image
+of a screen that no longer exists is a claim the README is making and getting wrong. The raster
+icons come from `pnpm icons`, off the same SVG, so there is one drawing of the mark rather than
+four that drift.

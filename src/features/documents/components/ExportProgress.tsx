@@ -39,7 +39,7 @@ export function ExportProgress({ state }: { state: ExportState }) {
     const percent = fraction === null ? null : Math.round(fraction * 100);
 
     return (
-      <Box className="mb-4 flex flex-col gap-1.5">
+      <Box className="flex flex-col gap-1.5">
         <Typography variant="caption" className="figures" sx={{ color: 'text.secondary' }}>
           Preparing the file · {formatBytes(state.received)}
           {percent === null ? '' : ` of ${formatBytes(state.total ?? 0)} · ${percent}%`}
@@ -62,9 +62,5 @@ export function ExportProgress({ state }: { state: ExportState }) {
 
   if (outcome === null) return null;
 
-  return (
-    <Box className="mb-4">
-      <ActionOutcome lines={[outcome]} />
-    </Box>
-  );
+  return <ActionOutcome lines={[outcome]} />;
 }

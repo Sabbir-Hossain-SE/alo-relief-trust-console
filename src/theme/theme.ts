@@ -1,18 +1,47 @@
+import type { CSSProperties } from 'react';
 import { createTheme } from '@mui/material/styles';
 import type { ProcessingStatus } from '@/domain/status';
-import { brand, fontStacks, motion, radii, statusTones, surfaces, type StatusTone } from './tokens';
+import {
+  brand,
+  brandMark,
+  fontStacks,
+  motion,
+  radii,
+  statusTones,
+  surfaces,
+  type StatusTone,
+} from './tokens';
+
+declare module '@mui/material/Typography' {
+  interface TypographyPropsVariantOverrides {
+    figureLarge: true;
+    figureMedium: true;
+  }
+}
 
 declare module '@mui/material/styles' {
+  interface TypographyVariants {
+    figureLarge: CSSProperties;
+    figureMedium: CSSProperties;
+  }
+  interface TypographyVariantsOptions {
+    figureLarge?: CSSProperties;
+    figureMedium?: CSSProperties;
+  }
+
   interface Palette {
     status: Record<ProcessingStatus, StatusTone>;
     accent: string;
     accentInk: string;
+    /** The logo's horizon, the one part of the mark that follows the scheme. */
+    brandHorizon: string;
     hairline: string;
   }
   interface PaletteOptions {
     status?: Record<ProcessingStatus, StatusTone>;
     accent?: string;
     accentInk?: string;
+    brandHorizon?: string;
     hairline?: string;
   }
 }
@@ -41,6 +70,7 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
           primary: { main: brand.primary.light },
           accent: brand.accent.light,
           accentInk: brand.accentInk.light,
+          brandHorizon: brandMark.horizon.light,
           status: statusTones.light,
           hairline: surfaces.light.hairline,
           background: { default: surfaces.light.ground, paper: surfaces.light.surface },
@@ -54,6 +84,7 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
           primary: { main: brand.primary.dark },
           accent: brand.accent.dark,
           accentInk: brand.accentInk.dark,
+          brandHorizon: brandMark.horizon.dark,
           status: statusTones.dark,
           hairline: surfaces.dark.hairline,
           background: { default: surfaces.dark.ground, paper: surfaces.dark.surface },
@@ -68,9 +99,60 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
     typography: {
       fontFamily: fontStacks.body,
       // Fraunces carries titles and hero figures only. Everything else is Inter.
-      h1: { fontFamily: fontStacks.display, fontSize: '2.5rem', lineHeight: 1.15, fontWeight: 600 },
-      h2: { fontFamily: fontStacks.display, fontSize: '1.75rem', lineHeight: 1.2, fontWeight: 600 },
-      h3: { fontFamily: fontStacks.display, fontSize: '1.25rem', lineHeight: 1.3, fontWeight: 600 },
+      /**
+       * One typeface for the interface. Inter needs negative tracking to hold
+       * together at display sizes — set at its default spacing, a 40px heading
+       * reads as loose beside 14px body text, which is the usual way a
+       * single-family scale ends up looking accidental rather than chosen.
+       *
+       * Fraunces is still loaded and is used in exactly one place: the wordmark
+       * in `BrandMark`, which is a logo rather than a heading.
+       */
+      h1: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.75rem',
+        lineHeight: 1.2,
+        fontWeight: 600,
+        letterSpacing: '-0.018em',
+      },
+      h2: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.25rem',
+        lineHeight: 1.3,
+        fontWeight: 600,
+        letterSpacing: '-0.012em',
+      },
+      h3: {
+        fontFamily: fontStacks.body,
+        fontSize: '1rem',
+        lineHeight: 1.4,
+        fontWeight: 600,
+        letterSpacing: '-0.008em',
+      },
+
+      /**
+       * Numbers, not headings.
+       *
+       * The counts on this screen were set in h1 and h2, which tied the size of
+       * the archive total to the size of a page title. They are different jobs:
+       * the chrome should be quiet on a console worked for hours, and the
+       * figure is the thing being read. Separating them is what lets the
+       * headings come down without taking the data with them.
+       */
+      figureLarge: {
+        fontFamily: fontStacks.body,
+        fontSize: '2.5rem',
+        lineHeight: 1.1,
+        fontWeight: 600,
+        letterSpacing: '-0.022em',
+      },
+      figureMedium: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.75rem',
+        lineHeight: 1.15,
+        fontWeight: 600,
+        letterSpacing: '-0.018em',
+      },
       body1: { fontSize: '0.875rem', lineHeight: 1.5 },
       body2: { fontSize: '0.8125rem', lineHeight: 1.5 },
       button: { textTransform: 'none', fontWeight: 500 },

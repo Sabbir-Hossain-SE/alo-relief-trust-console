@@ -12,6 +12,8 @@ import { useSummary } from '@/store/polling';
 
 const CARD_GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5';
 
+const SECTION = 'flex flex-col gap-4';
+
 export function ArchiveSummaryPanel() {
   const { data, isLoading, isError, refetch } = useSummary();
 
@@ -27,8 +29,8 @@ export function ArchiveSummaryPanel() {
 
   if (isLoading || data === undefined) {
     return (
-      <>
-        <Paper className="mb-6 p-6">
+      <Box className={SECTION}>
+        <Paper className="p-6">
           <Skeleton variant="text" width={180} />
           <Skeleton variant="text" width={260} height={56} />
         </Paper>
@@ -37,17 +39,17 @@ export function ArchiveSummaryPanel() {
             <Skeleton key={status} variant="rounded" height={132} />
           ))}
         </Box>
-      </>
+      </Box>
     );
   }
 
   return (
-    <>
-      <Paper className="mb-6 p-6">
+    <Box className={SECTION}>
+      <Paper className="p-6">
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Documents in the archive
         </Typography>
-        <Typography variant="h1" component="p" className="figures" sx={{ mt: 0.5 }}>
+        <Typography variant="figureLarge" component="p" className="figures" sx={{ mt: 0.5 }}>
           {formatCount(data.total)}
         </Typography>
       </Paper>
@@ -57,6 +59,6 @@ export function ArchiveSummaryPanel() {
           <StatCard key={status} status={status} count={data.byStatus[status]} total={data.total} />
         ))}
       </Box>
-    </>
+    </Box>
   );
 }

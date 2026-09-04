@@ -3,6 +3,7 @@
 import Box from '@mui/material/Box';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import { ProgressAnnouncer, decile } from '@/components/feedback/ProgressAnnouncer';
 import { LinkButton } from '@/components/ui/LinkButton';
@@ -19,7 +20,7 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
 
   if (isError) {
     return (
-      <>
+      <PageSections>
         <PageHeader title="Batch" />
         <ErrorState
           title="That batch is not here"
@@ -29,12 +30,12 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
           description="It may have finished in an earlier session. The mock backend holds batches in memory, so reloading the page starts again with none."
           onRetry={() => void refetch()}
         />
-      </>
+      </PageSections>
     );
   }
 
   return (
-    <>
+    <PageSections>
       <PageHeader
         title={data?.settled === true ? 'Batch complete' : 'Batch in progress'}
         description="Every document in this upload, and what processing made of it."
@@ -51,7 +52,7 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
         }
       />
 
-      <Box className="flex flex-col gap-4">
+      <Box className={SECTION_CONTENT_GAP}>
         <BatchMonitorPanel summary={data} />
         <BatchSplit summary={data} />
         {data === undefined ? null : <BatchFailures summary={data} />}
@@ -64,6 +65,6 @@ export function BatchMonitorView({ batchId }: { batchId: string }) {
           final={data.settled}
         />
       )}
-    </>
+    </PageSections>
   );
 }

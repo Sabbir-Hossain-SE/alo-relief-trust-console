@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROCESSING_STATUSES } from '@/domain/status';
 import { AA_TEXT, AA_UI, blend, contrastRatio, relativeLuminance } from './contrast';
-import { brand, statusTones, surfaces } from './tokens';
+import { brand, brandMark, statusTones, surfaces } from './tokens';
 
 /**
  * The guard, not a one-off check. The first palette looked calm and failed
@@ -108,4 +108,27 @@ describe('body and muted text', () => {
       expect(worstAgainstBackgrounds(textMuted, scheme)).toBeGreaterThanOrEqual(AA_TEXT);
     });
   }
+});
+
+describe('the brand mark stays visible on its own ground', () => {
+  /**
+   * The horizon is the only part of the mark that follows the scheme, and it is
+   * the part that gives the drawing its base. At a mid grey it would clear
+   * neither ground and the mark would read as a floating sun in both.
+   */
+  for (const scheme of SCHEMES) {
+    it(`keeps the horizon above the graphics threshold in ${scheme}`, () => {
+      const ratio = contrastRatio(brandMark.horizon[scheme], surfaces[scheme].ground);
+
+      expect(ratio).toBeGreaterThanOrEqual(AA_UI);
+    });
+  }
+
+  /**
+   * No threshold on the sun, deliberately. It is a warm fill on warm paper at
+   * 1.8:1 and could not reach 3:1 without becoming a different colour — the
+   * same trade the accent token already records. It is decoration, hidden from
+   * assistive technology, and the horizon is what carries the mark; a number
+   * here would be one fitted to whatever the palette happened to be.
+   */
 });

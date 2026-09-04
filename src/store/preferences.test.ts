@@ -7,6 +7,7 @@ import {
   loadPreferences,
   savePreferences,
   setDensity,
+  setNavCollapsed,
   setPageSize,
 } from './preferences';
 
@@ -40,11 +41,10 @@ describe('loadPreferences', () => {
   });
 
   it('reads what was saved', () => {
-    const storage = fakeStorage({
-      [PREFERENCES_STORAGE_KEY]: JSON.stringify({ density: 'compact', pageSize: 100 }),
-    });
+    const saved = { density: 'compact', pageSize: 100, navCollapsed: true };
+    const storage = fakeStorage({ [PREFERENCES_STORAGE_KEY]: JSON.stringify(saved) });
 
-    expect(loadPreferences(storage)).toEqual({ density: 'compact', pageSize: 100 });
+    expect(loadPreferences(storage)).toEqual(saved);
   });
 
   it('ignores a value written by an older or hand-edited build', () => {
@@ -68,9 +68,10 @@ describe('loadPreferences', () => {
 describe('savePreferences', () => {
   it('round-trips through storage', () => {
     const storage = fakeStorage();
-    savePreferences({ density: 'compact', pageSize: 25 }, storage);
+    const value = { density: 'compact', pageSize: 25, navCollapsed: true } as const;
+    savePreferences(value, storage);
 
-    expect(loadPreferences(storage)).toEqual({ density: 'compact', pageSize: 25 });
+    expect(loadPreferences(storage)).toEqual(value);
   });
 
   it('survives storage that refuses to be written', () => {
@@ -92,15 +93,28 @@ describe('preferences slice', () => {
     expect(store.getState().preferences).toEqual({ ...DEFAULT_PREFERENCES, density: 'compact' });
 
     store.dispatch(setPageSize(100));
-    expect(store.getState().preferences).toEqual({ density: 'compact', pageSize: 100 });
+    expect(store.getState().preferences).toEqual({
+      ...DEFAULT_PREFERENCES,
+      density: 'compact',
+      pageSize: 100,
+    });
+
+    store.dispatch(setNavCollapsed(true));
+    expect(store.getState().preferences).toEqual({
+      ...DEFAULT_PREFERENCES,
+      density: 'compact',
+      pageSize: 100,
+      navCollapsed: true,
+    });
   });
 
   it('replaces everything on hydrate', () => {
     const store = makeStore();
     store.dispatch(setDensity('compact'));
-    store.dispatch(hydratePreferences({ density: 'comfortable', pageSize: 25 }));
+    const hydrated = { density: 'comfortable', pageSize: 25, navCollapsed: true } as const;
+    store.dispatch(hydratePreferences(hydrated));
 
-    expect(store.getState().preferences).toEqual({ density: 'comfortable', pageSize: 25 });
+    expect(store.getState().preferences).toEqual(hydrated);
   });
 
   it('leaves the api cache alone', () => {
@@ -108,5 +122,33 @@ describe('preferences slice', () => {
     store.dispatch(setDensity('compact'));
 
     expect(store.getState().api.queries).toEqual({});
+  });
+});
+
+describe('loadPreferences across builds', () => {
+  /**
+   * The nav preference arrived after this key was already in use. A required
+   * field would have failed the whole object, so an operator returning to the
+   * app would silently lose the density and page size they had chosen in order
+   * to gain a nav setting they never asked for.
+   */
+  it('keeps what an older build stored, and defaults what it did not', () => {
+    const storage = fakeStorage({
+      [PREFERENCES_STORAGE_KEY]: JSON.stringify({ density: 'compact', pageSize: 100 }),
+    });
+
+    expect(loadPreferences(storage)).toEqual({
+      density: 'compact',
+      pageSize: 100,
+      navCollapsed: false,
+    });
+  });
+
+  it('still refuses a stored shape that is actually wrong', () => {
+    const storage = fakeStorage({
+      [PREFERENCES_STORAGE_KEY]: JSON.stringify({ density: 'roomy', pageSize: 100 }),
+    });
+
+    expect(loadPreferences(storage)).toEqual(DEFAULT_PREFERENCES);
   });
 });

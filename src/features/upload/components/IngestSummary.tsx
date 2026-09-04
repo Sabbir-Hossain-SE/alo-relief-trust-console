@@ -34,7 +34,7 @@ export function IndexingProgress({
 }) {
   return (
     <UploadPanel>
-      <Typography variant="h2" component="p" className="figures">
+      <Typography variant="figureMedium" component="p" className="figures">
         {formatCount(progress.scanned)}
       </Typography>
 
@@ -83,7 +83,7 @@ export function IngestSummary({
       <CheckCircleOutlinedIcon sx={{ fontSize: 36, color: 'status.completed.ink' }} />
 
       <Box>
-        <Typography variant="h2" component="p" className="figures">
+        <Typography variant="figureMedium" component="p" className="figures">
           {formatCount(result.accepted)}
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>

@@ -9,6 +9,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { VirtualList } from '@/components/data/VirtualList';
 import { DocumentDrawer } from '@/features/documents/components/DocumentDrawer';
 import { useDocumentQuery } from '@/features/documents/useDocumentQuery';
@@ -16,7 +17,12 @@ import { formatCount } from '@/lib/format/number';
 import { useDocuments } from '@/store/polling';
 import { ReviewTask, TASK_HEIGHT } from './components/ReviewTask';
 
-const LIST_HEIGHT = 560;
+/**
+ * Whole rows only. A height that lands mid-row cuts the last task in half,
+ * which reads as a rendering fault rather than as more work below the fold.
+ */
+const VISIBLE_TASKS = 7;
+const LIST_HEIGHT = VISIBLE_TASKS * TASK_HEIGHT;
 
 /** How much of the queue is fetched. It is worked from the top, not browsed. */
 const QUEUE_DEPTH = 200;
@@ -40,7 +46,7 @@ function ReviewQueue() {
   });
 
   return (
-    <>
+    <PageSections>
       <PageHeader
         title="Review queue"
         description="Records the pipeline was not sure about, least certain first."
@@ -61,7 +67,7 @@ function ReviewQueue() {
           description="Every extracted record has either passed or been checked by hand."
         />
       ) : (
-        <Box className="flex flex-col gap-3">
+        <Box className={SECTION_CONTENT_GAP}>
           {/* Deliberately not a live region. Polling refreshes this every 1.5s
               while a batch runs, so announcing it would talk over everything
               else — the same mistake ProgressAnnouncer exists to avoid. */}
@@ -94,7 +100,7 @@ function ReviewQueue() {
       )}
 
       <DocumentDrawer documentId={selectedId} onClose={() => select(null)} />
-    </>
+    </PageSections>
   );
 }
 

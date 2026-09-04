@@ -6,6 +6,7 @@ import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { useBatches } from '@/store/polling';
 import { BatchListRow } from './components/BatchListRow';
@@ -15,7 +16,7 @@ export function BatchListView() {
   const { data, isLoading, isError, refetch } = useBatches();
 
   return (
-    <>
+    <PageSections>
       <PageHeader
         title="Batches"
         description="Uploads and what processing made of them."
@@ -33,7 +34,7 @@ export function BatchListView() {
           onRetry={() => void refetch()}
         />
       ) : isLoading || data === undefined ? (
-        <Box className="flex flex-col gap-4">
+        <Box className={SECTION_CONTENT_GAP}>
           {[0, 1, 2].map((row) => (
             <Skeleton key={row} variant="rounded" height={168} />
           ))}
@@ -49,12 +50,12 @@ export function BatchListView() {
           }
         />
       ) : (
-        <Box className="flex flex-col gap-4">
+        <Box className={SECTION_CONTENT_GAP}>
           {data.map((summary) => (
             <BatchListRow key={summary.id} summary={summary} />
           ))}
         </Box>
       )}
-    </>
+    </PageSections>
   );
 }

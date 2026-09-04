@@ -30,7 +30,7 @@ export function BreakdownCard({ title, caption, rows, total, emptyMessage }: Bre
   const peak = rows.reduce((max, row) => Math.max(max, row.count), 0);
 
   return (
-    <Paper className="flex flex-col gap-3 p-5">
+    <Paper className="flex flex-col gap-4 p-6">
       <Box>
         <Typography variant="h3" component="h3">
           {title}

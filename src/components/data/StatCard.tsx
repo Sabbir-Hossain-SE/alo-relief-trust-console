@@ -41,7 +41,7 @@ export function StatCard({ status, count, total, href }: StatCardProps) {
         {STATUS_LABELS[status]}
       </Typography>
 
-      <Typography variant="h2" component="p" className="figures">
+      <Typography variant="figureMedium" component="p" className="figures">
         {formatCount(count)}
       </Typography>
 
