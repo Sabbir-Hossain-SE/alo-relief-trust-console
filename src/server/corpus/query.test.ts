@@ -9,6 +9,7 @@ import {
   DEFAULT_PAGE_SIZE,
   countByStatus,
   filterIndices,
+  orderedIndices,
   queryDocuments,
   sortIndices,
   type SortField,
@@ -167,10 +168,59 @@ describe('search', () => {
     expect(filterIndices(store, empty, { search: 'zzzznotarealname' })).toHaveLength(0);
   });
 
+  it('honours the other filters beside a search by id', () => {
+    const index = firstWithStatus('failed');
+    const id = documentId(index);
+
+    expect(Array.from(filterIndices(store, empty, { search: id }))).toEqual([index]);
+    expect(filterIndices(store, empty, { search: id, status: ['completed'] })).toHaveLength(0);
+  });
+
+  // The band filter compares numbers against the thresholds rather than naming
+  // a band per row; the two have to agree exactly at the edges.
+  it('places a score on a threshold in the same band the domain does', () => {
+    for (const index of filterIndices(store, empty, { confidence: ['medium'] })) {
+      expect(confidenceBand(store.confidence[index] as number)).toBe('medium');
+    }
+    for (const index of filterIndices(store, empty, { confidence: ['high'] })) {
+      expect(confidenceBand(store.confidence[index] as number)).toBe('high');
+    }
+  });
+
   it('does not fall over on regex-special characters', () => {
     for (const term of ['(', '[a-z]', '.*', '\\', '?']) {
       expect(() => filterIndices(store, empty, { search: term })).not.toThrow();
     }
+  });
+});
+
+describe('orderedIndices', () => {
+  const same = (query: Parameters<typeof orderedIndices>[2]) => {
+    const expected = sortIndices(
+      store,
+      filterIndices(store, empty, query),
+      query.sortField ?? 'uploadedAt',
+      query.sortDirection ?? 'desc',
+    );
+    expect(Array.from(orderedIndices(store, empty, query))).toEqual(Array.from(expected));
+  };
+
+  // The default order is walked from the kept order rather than sorted; both
+  // routes have to land on the same rows in the same places.
+  it('agrees with filtering then sorting, on the fast path and off it', () => {
+    same({});
+    same({ sortField: 'uploadedAt', sortDirection: 'desc' });
+    same({ status: ['needs_review'], search: 'a' });
+    same({ status: ['failed'], sortField: 'confidence', sortDirection: 'asc' });
+    same({
+      documentType: [DOCUMENT_TYPES[0] as (typeof DOCUMENT_TYPES)[number]],
+      sortField: 'index',
+    });
+  });
+
+  it('refuses a kept order that does not cover the archive', () => {
+    const stale = { ...store, uploadedDesc: store.uploadedDesc.subarray(1) };
+    expect(() => orderedIndices(stale, empty, {})).toThrow(RangeError);
   });
 });
 

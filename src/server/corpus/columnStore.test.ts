@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertInRange, buildColumnStore, storeBytes } from './columnStore';
+import { appendDocuments, assertInRange, buildColumnStore, storeBytes } from './columnStore';
 import { generateCore } from './generate';
 
 const SEED = 20260901;
@@ -75,6 +75,17 @@ describe('buildColumnStore', () => {
       expect(store.missingMask[index]).toBe(core.missingMask);
       expect(store.docTypeId[index]).toBe(core.docTypeId);
     }
+  });
+});
+
+describe('the kept upload order', () => {
+  it('covers the archive after a build and after an append', () => {
+    const store = buildColumnStore(SEED, 1000, 500);
+    expect(store.uploadedDesc).toHaveLength(1000);
+
+    appendDocuments(store, 300);
+    expect(store.uploadedDesc).toHaveLength(1300);
+    expect(new Set(store.uploadedDesc).size).toBe(1300);
   });
 });
 

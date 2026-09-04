@@ -16,7 +16,7 @@ import { correctionsSchema } from './correction-contract';
 import { analyzeArchive } from './corpus/analytics';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
 import { documentsToCsv, exportFileName } from './corpus/exportCsv';
-import { countByStatus, filterIndices, queryDocuments, sortIndices } from './corpus/query';
+import { countByStatus, orderedIndices, queryDocuments } from './corpus/query';
 import {
   advanceAll,
   batchFor,
@@ -105,13 +105,7 @@ export const handlers = [
     advanceAll(db);
 
     const query = fromSearchParams(new URL(request.url).searchParams);
-    const matched = filterIndices(db.store, db.overlay, query);
-    const ordered = sortIndices(
-      db.store,
-      matched,
-      query.sortField ?? 'uploadedAt',
-      query.sortDirection ?? 'desc',
-    );
+    const ordered = orderedIndices(db.store, db.overlay, query);
 
     return new HttpResponse(documentsToCsv(db.store, db.overlay, ordered), {
       headers: {

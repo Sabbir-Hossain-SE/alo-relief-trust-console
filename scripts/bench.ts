@@ -1,4 +1,4 @@
-import { buildColumnStore, storeBytes } from '../src/server/corpus/columnStore';
+import { appendDocuments, buildColumnStore, storeBytes } from '../src/server/corpus/columnStore';
 import { detailAt, summaryAt } from '../src/server/corpus/documentAt';
 import { generateCore } from '../src/server/corpus/generate';
 import { createOverlay } from '../src/server/corpus/overlay';
@@ -9,6 +9,7 @@ import {
   sortIndices,
 } from '../src/server/corpus/query';
 import { DEFAULT_ARCHIVE_SIZE, DEFAULT_SEED } from '../src/server/corpus/config';
+import { uploadedOrder } from '../src/server/corpus/sort';
 
 const SIZE = Number(process.argv[2]) || DEFAULT_ARCHIVE_SIZE;
 const OBJECT_SAMPLE = 20_000;
@@ -107,6 +108,20 @@ async function main(): Promise<void> {
 
   console.log(`  ${'  → rows returned'.padEnd(38)} ${String(page.rows.length).padStart(8)}`);
   console.log(`  ${'  → matching documents'.padEnd(38)} ${String(page.total).padStart(8)}`);
+
+  console.log('');
+
+  // The view the grid opens in: walked from the kept order, never sorted.
+  time('default query: newest first, page of 50', () => queryDocuments(store, overlay, {}));
+  time('build the kept upload order (once)', () => uploadedOrder(store));
+  time('filter: by confidence band', () => filterIndices(store, overlay, { confidence: ['low'] }));
+  time('search: a term that matches nothing', () =>
+    filterIndices(store, overlay, { search: 'zzzznotarealname' }),
+  );
+
+  // An upload's worth of rows, folded into the kept order rather than resorted.
+  const growable = buildColumnStore(DEFAULT_SEED, SIZE, 25_000);
+  time('append 25,000 documents into the order', () => appendDocuments(growable, 25_000));
 
   // Measured rather than estimated: hold a real sample so it cannot be
   // collected, then extrapolate from the heap delta.
