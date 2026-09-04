@@ -15,6 +15,40 @@ import { documentColumns } from './columns';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
+/**
+ * Row heights owned here rather than inherited from MUI's density.
+ *
+ * `density` is a multiplier over whatever `rowHeight` says, and the factor is
+ * not a number the library exports — so with the toggle driving it, the rendered
+ * row height is unknowable from here and the container cannot be sized in whole
+ * rows. The grid is pinned to `standard`, which is the factor of one, and the
+ * preference drives the row height directly instead. That is what a density
+ * toggle is for; the padding either side of it is MUI's business.
+ */
+export const ROW_HEIGHT = { comfortable: 56, compact: 40 } as const;
+const HEADER_HEIGHT = 56;
+const FOOTER_HEIGHT = 52;
+
+/** Roughly a laptop viewport once the bar, the page header and the filters are out. */
+const TARGET_BODY_HEIGHT = 560;
+
+/**
+ * Sizes the grid to whole rows.
+ *
+ * A fixed height cuts the last row in half wherever it happens to land, which
+ * reads as a rendering fault rather than as a scroll affordance — and it moves
+ * with the density toggle, so it cannot be corrected with one number.
+ */
+export function gridHeight(rowHeight: number): number {
+  const rows = Math.max(4, Math.floor(TARGET_BODY_HEIGHT / rowHeight));
+  return HEADER_HEIGHT + FOOTER_HEIGHT + rows * rowHeight;
+}
+
+/** How many rows a given height shows, for asserting that none is half of one. */
+export function visibleRows(height: number, rowHeight: number): number {
+  return (height - HEADER_HEIGHT - FOOTER_HEIGHT) / rowHeight;
+}
+
 type DocumentsGridProps = {
   onOpen?: (document: DocumentSummary) => void;
 };
@@ -89,15 +123,22 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
     );
   }
 
+  const rowHeight = ROW_HEIGHT[density];
+
   return (
-    <Paper sx={{ height: 640, width: '100%' }}>
+    // The height goes on the grid rather than on the Paper around it: Paper
+    // carries a border, so a height set there is two pixels short by the time
+    // the rows are laid out, which is all it takes to slice the last one.
+    <Paper sx={{ width: '100%' }}>
       <DataGrid<DocumentSummary>
         rows={data?.rows ?? []}
         columns={documentColumns}
         // Stable identity, so a refetch updates rows instead of remounting them.
         getRowId={(row) => row.id}
         loading={isFetching}
-        density={density}
+        density="standard"
+        rowHeight={rowHeight}
+        columnHeaderHeight={HEADER_HEIGHT}
         rowCount={data?.total ?? 0}
         paginationMode="server"
         sortingMode="server"
@@ -125,6 +166,7 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
         }
         sx={{
           border: 0,
+          height: gridHeight(rowHeight),
           '& .MuiDataGrid-row': { cursor: onOpen === undefined ? 'default' : 'pointer' },
         }}
         aria-label="Documents in the archive"
