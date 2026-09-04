@@ -52,3 +52,25 @@ test('still lets the drop zone take a drop', async ({ page }) => {
 
   await expect(page.getByText(/document ready to upload/)).toBeVisible();
 });
+
+/**
+ * Only a file can open in place of the page. Text dragged into the search box
+ * — a name off a scan, a number off a spreadsheet — is the browser doing what
+ * the operator asked of it, and the guard used to refuse that too.
+ */
+test('lets text be dragged into a field', async ({ page }) => {
+  await open(page, '/documents');
+
+  const refused = await page.evaluate(() => {
+    const search = document.querySelector('input[aria-label="Search documents"]');
+    if (search === null) throw new Error('No search box');
+
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData('text/plain', 'rahim');
+
+    const event = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer });
+    return !search.dispatchEvent(event);
+  });
+
+  expect(refused).toBe(false);
+});

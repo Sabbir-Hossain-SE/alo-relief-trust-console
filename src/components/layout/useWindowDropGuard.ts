@@ -12,6 +12,15 @@ function insideDropTarget(event: DragEvent): boolean {
 }
 
 /**
+ * Whether the drag carries files, which is the only kind a stray drop turns
+ * into a navigation. Text dragged into the search box, or a number into a
+ * correction field, is the browser doing what an operator asked of it.
+ */
+function carriesFiles(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+
+/**
  * Stops a drop that misses its target from navigating the tab.
  *
  * Dropped on any other part of the page, a file opens in place of the
@@ -26,7 +35,7 @@ function insideDropTarget(event: DragEvent): boolean {
 export function useWindowDropGuard(): void {
   useEffect(() => {
     const refuse = (event: DragEvent) => {
-      if (insideDropTarget(event)) return;
+      if (!carriesFiles(event) || insideDropTarget(event)) return;
 
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
