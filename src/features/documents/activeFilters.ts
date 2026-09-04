@@ -1,5 +1,6 @@
 import { CONFIDENCE_BAND_LABELS, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from '@/domain/document';
+import { describeError, type ProcessingErrorCode } from '@/domain/errors';
 import { STATUS_LABELS, type ProcessingStatus } from '@/domain/status';
 import type { DocumentQueryInput } from '@/server/api-contract';
 
@@ -47,6 +48,16 @@ export function activeFilters(query: DocumentQueryInput): ActiveFilter[] {
       id: `confidence:${band}`,
       label: CONFIDENCE_BAND_LABELS[band as ConfidenceBand],
       patch: { confidence: without(query.confidence ?? [], band) },
+    });
+  }
+
+  // Arrives from the overview's failure breakdown, and without a chip it was a
+  // narrowing with no name on screen and no way off but the navigation.
+  for (const code of query.errorCode ?? []) {
+    filters.push({
+      id: `cause:${code}`,
+      label: describeError(code as ProcessingErrorCode).title,
+      patch: { errorCode: without(query.errorCode ?? [], code) },
     });
   }
 

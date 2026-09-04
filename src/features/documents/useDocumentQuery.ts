@@ -30,8 +30,15 @@ export function useDocumentQuery() {
    * replaces, because a history entry per keystroke would bury the view an
    * operator actually wants to return to.
    */
-  /** The open document, kept in the URL so a record can be linked to directly. */
-  const selectedId = searchParams.get('doc');
+  /**
+   * The open document, kept in the URL so a record can be linked to directly.
+   *
+   * Blank counts as absent. `?doc=` used to open the drawer on an empty id,
+   * whose request matched the list route and handed the drawer a page of rows
+   * to render as one record — which took the whole screen down.
+   */
+  const requestedId = searchParams.get('doc');
+  const selectedId = requestedId !== null && requestedId.trim() !== '' ? requestedId : null;
 
   const apply = useCallback(
     (next: DocumentQueryInput, history: 'push' | 'replace', doc?: string | null) => {
@@ -39,7 +46,7 @@ export function useDocumentQuery() {
 
       // The open document is not part of the API query, so it has to be carried
       // across explicitly or changing a filter would close the drawer.
-      const nextDoc = doc === undefined ? searchParams.get('doc') : doc;
+      const nextDoc = doc === undefined ? selectedId : doc;
       if (nextDoc) params.set('doc', nextDoc);
 
       const search = params.toString();
@@ -49,11 +56,20 @@ export function useDocumentQuery() {
       if (history === 'push') router.push(url, { scroll: false });
       else router.replace(url, { scroll: false });
     },
-    [pathname, router, searchParams],
+    [pathname, router, selectedId],
   );
 
-  /** Opens or closes the detail drawer. Pushes, so Back closes it. */
-  const select = useCallback((id: string | null) => apply(query, 'push', id), [apply, query]);
+  /**
+   * Opens or closes the detail drawer.
+   *
+   * Opening pushes, so Back closes it. Closing replaces: pushed as well, the
+   * closed view sat on top of the open one and Back reopened the drawer that
+   * had just been dismissed.
+   */
+  const select = useCallback(
+    (id: string | null) => apply(query, id === null ? 'replace' : 'push', id),
+    [apply, query],
+  );
 
   /** Applies a change and returns to the first page, since the result set moved. */
   const update = useCallback(
@@ -74,9 +90,12 @@ export function useDocumentQuery() {
     (query.status?.length ?? 0) > 0 ||
     (query.documentType?.length ?? 0) > 0 ||
     (query.confidence?.length ?? 0) > 0 ||
+    (query.errorCode?.length ?? 0) > 0 ||
     query.needsAttention === true ||
     query.batchId !== undefined ||
-    (query.search ?? '').length > 0;
+    // Trimmed, as the search itself is: a lone space filters nothing and must
+    // not claim to.
+    (query.search ?? '').trim().length > 0;
 
   return { query, update, goToPage, clear, isFiltered, selectedId, select };
 }

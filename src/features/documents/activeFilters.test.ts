@@ -45,10 +45,21 @@ describe('activeFilters', () => {
   });
 
   it('covers the narrowings that arrive from elsewhere in the app', () => {
-    const filters = activeFilters({ batchId: 'batch-7', needsAttention: true });
+    // A cause arrives from the overview's failure breakdown. Without a chip it
+    // was a narrowing with no name on screen and no way off but the navigation.
+    const filters = activeFilters({
+      errorCode: ['unreadable_scan'],
+      batchId: 'batch-7',
+      needsAttention: true,
+    });
 
-    expect(filters.map((filter) => filter.label)).toEqual(['Batch batch-7', 'Needs attention']);
+    expect(filters.map((filter) => filter.label)).toEqual([
+      'Scan too poor to read',
+      'Batch batch-7',
+      'Needs attention',
+    ]);
     expect(filters.map((filter) => filter.patch)).toEqual([
+      { errorCode: undefined },
       { batchId: undefined },
       { needsAttention: undefined },
     ]);
