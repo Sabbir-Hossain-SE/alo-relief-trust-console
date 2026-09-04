@@ -59,7 +59,7 @@ export function MockApiGate({ children }: { children: ReactNode }) {
     return (
       <ErrorState
         title="The demo backend did not start"
-        description="This prototype serves its data from a service worker in your browser. It could not be registered, which usually means the page is running from a context that blocks service workers."
+        description="This prototype serves its data from a service worker in your browser. It could not be registered. Service workers need a secure page — https, or localhost — and some private windows and older browsers turn them off."
         onRetry={() => window.location.reload()}
         retryLabel="Reload"
       />
