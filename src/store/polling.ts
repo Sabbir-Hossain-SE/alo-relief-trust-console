@@ -79,13 +79,29 @@ export function useBatches() {
 /**
  * Reports whether processing is currently changing the archive.
  *
- * Backed by `useBatches`, so it carries its own polling rather than depending
- * on some other component happening to subscribe. Identical subscriptions are
- * deduplicated, so several callers still produce one request.
+ * Carries its own polling rather than depending on some other component
+ * happening to subscribe; identical subscriptions are deduplicated, so several
+ * callers still produce one request. It subscribes to the answer alone: every
+ * poll changes the result's timestamps, and a caller reading the whole result
+ * re-rendered twice a tick — the grid among them — for a boolean that had not.
  */
 export function useArchiveIsChanging(): boolean {
-  const { data } = useBatches();
-  return data?.some((batch) => !batch.settled) ?? false;
+  const [interval, setPollInterval] = useState(POLL_INTERVAL_MS);
+
+  const { changing, known, isError } = useGetBatchesQuery(undefined, {
+    pollingInterval: interval,
+    skipPollingIfUnfocused: true,
+    selectFromResult: ({ data, isError }) => ({
+      changing: data?.some((batch) => !batch.settled) ?? false,
+      known: data !== undefined,
+      isError,
+    }),
+  });
+
+  const desired = nextPollInterval(isError, known ? !changing : undefined);
+  if (interval !== desired) setPollInterval(desired);
+
+  return changing;
 }
 
 /** The archive counts, refreshed only while a batch is moving them. */

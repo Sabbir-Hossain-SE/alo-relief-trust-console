@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import ClearIcon from '@mui/icons-material/Clear';
 import TuneIcon from '@mui/icons-material/Tune';
 import Badge from '@mui/material/Badge';
@@ -10,8 +10,8 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { alpha, useTheme } from '@mui/material/styles';
-import type { ConfidenceBand } from '@/domain/confidence';
-import type { ProcessingStatus } from '@/domain/status';
+import { CONFIDENCE_BANDS, type ConfidenceBand } from '@/domain/confidence';
+import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { DocumentQueryInput } from '@/server/api-contract';
 import { activeFilters } from '../activeFilters';
 import { DocumentSearch } from './DocumentSearch';
@@ -26,10 +26,16 @@ type DocumentFiltersProps = {
   onClear: () => void;
 };
 
-// Adds or removes one value from a multi-select filter.
-function toggle<T>(values: readonly T[] | undefined, value: T): T[] {
+// Adds or removes one value from a multi-select filter, in the domain's order:
+// appended in click order, "failed then needs review" and the reverse were two
+// URLs, two cache keys and two round trips for one set of rows.
+function toggle<T>(values: readonly T[] | undefined, value: T, order: readonly T[]): T[] {
   const current = values ?? [];
-  return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+  const next = current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value];
+
+  return next.toSorted((a, b) => order.indexOf(a) - order.indexOf(b));
 }
 
 /**
@@ -45,7 +51,9 @@ function toggle<T>(values: readonly T[] | undefined, value: T): T[] {
  * both would answer to the same name. Safe against hydration here because this
  * whole view renders behind the mock backend's gate.
  */
-export function DocumentFilters({ query, isFiltered, onChange, onClear }: DocumentFiltersProps) {
+// Memoised for the same reason as the grid: the view re-renders per export chunk.
+export const DocumentFilters = memo(function DocumentFilters(props: DocumentFiltersProps) {
+  const { query, isFiltered, onChange, onClear } = props;
   const theme = useTheme();
   const roomForChips = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -53,9 +61,9 @@ export function DocumentFilters({ query, isFiltered, onChange, onClear }: Docume
   const applied = activeFilters(query);
 
   const toggleStatus = (status: ProcessingStatus) =>
-    onChange({ status: toggle(query.status, status) });
+    onChange({ status: toggle(query.status, status, PROCESSING_STATUSES) });
   const toggleConfidence = (band: ConfidenceBand) =>
-    onChange({ confidence: toggle(query.confidence, band) });
+    onChange({ confidence: toggle(query.confidence, band, CONFIDENCE_BANDS) });
 
   const search = (
     <DocumentSearch
@@ -185,4 +193,4 @@ export function DocumentFilters({ query, isFiltered, onChange, onClear }: Docume
       </Box>
     </Box>
   );
-}
+});

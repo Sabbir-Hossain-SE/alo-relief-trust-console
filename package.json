@@ -19,6 +19,7 @@
     "icons": "tsx scripts/icons.ts",
     "gen:pools": "tsx scripts/generate-pools.ts",
     "bench": "tsx scripts/bench.ts",
+    "bundle": "tsx scripts/bundle.ts",
     "prepare": "husky"
   },
   "dependencies": {

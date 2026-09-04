@@ -1,4 +1,7 @@
-export type ConfidenceBand = 'high' | 'medium' | 'low';
+/** The bands in the order the interface offers them, most certain first. */
+export const CONFIDENCE_BANDS = ['high', 'medium', 'low'] as const;
+
+export type ConfidenceBand = (typeof CONFIDENCE_BANDS)[number];
 
 export const HIGH_CONFIDENCE = 0.9;
 export const MEDIUM_CONFIDENCE = 0.7;

@@ -9,8 +9,13 @@ const FALLBACK_NAME = 'documents.csv';
 
 export type ExportState =
   | { status: 'idle' }
-  /** `total` is null until the response headers arrive, and stays null without a length. */
-  | { status: 'running'; received: number; total: number | null }
+  /**
+   * `total` is null until the response headers arrive, and stays null without
+   * a length. A streamed file has no exact length ahead of time, so the server
+   * offers an estimate from its first rows; `approximate` says the bar is
+   * reading one.
+   */
+  | { status: 'running'; received: number; total: number | null; approximate?: boolean }
   | { status: 'done'; rows: number }
   | { status: 'cancelled' }
   | { status: 'failed'; message: string };
@@ -23,12 +28,23 @@ export type ExportState =
  * fifth of the way and sit there. A header that is not a number is treated the
  * same way, rather than being divided by to produce "NaN%".
  */
-function bodyLength(headers: Headers): number | null {
+function bodyLength(headers: Headers): { total: number | null; approximate: boolean } {
   const encoding = headers.get('content-encoding');
-  if (encoding !== null && encoding !== 'identity') return null;
+  if (encoding !== null && encoding !== 'identity') return { total: null, approximate: false };
 
-  const length = Number(headers.get('content-length'));
-  return Number.isFinite(length) && length > 0 ? length : null;
+  const exact = Number(headers.get('content-length'));
+  if (Number.isFinite(exact) && exact > 0) return { total: exact, approximate: false };
+
+  const estimate = Number(headers.get('x-content-length-estimate'));
+  return Number.isFinite(estimate) && estimate > 0
+    ? { total: estimate, approximate: true }
+    : { total: null, approximate: false };
+}
+
+// Whether a chunk moved the bar by a whole percent, which is all it can show.
+function movedThePercent(previous: number, next: number, total: number | null): boolean {
+  if (total === null) return true;
+  return Math.floor((100 * previous) / total) !== Math.floor((100 * next) / total);
 }
 
 /** A share of the file, or null when the size is not known yet. */
@@ -84,7 +100,7 @@ export function useCsvExport() {
 
       if (!response.ok) throw new Error(`The export failed with ${response.status}.`);
 
-      const total = bodyLength(response.headers);
+      const { total, approximate } = bodyLength(response.headers);
       const rows = Number(response.headers.get('x-total-count') ?? '0');
 
       // The count is in the headers, so an empty result is known before a byte
@@ -110,15 +126,23 @@ export function useCsvExport() {
           if (done) break;
 
           chunks.push(value);
+          const before = received;
           received += value.byteLength;
-          setState({ status: 'running', received, total });
+
+          // A render per chunk re-rendered the whole view a hundred times a
+          // second for a bar that can only move by whole percents.
+          if (movedThePercent(before, received, total)) {
+            setState({ status: 'running', received, total, approximate });
+          }
         }
       }
 
-      saveBlob(
-        new Blob(chunks as BlobPart[], { type: 'text/csv;charset=utf-8' }),
-        fileNameFrom(response.headers.get('content-disposition'), FALLBACK_NAME),
-      );
+      const blob = new Blob(chunks as BlobPart[], { type: 'text/csv;charset=utf-8' });
+      // The blob holds its own copy; the chunks would otherwise stay alive for
+      // as long as the download's URL does.
+      chunks.length = 0;
+
+      saveBlob(blob, fileNameFrom(response.headers.get('content-disposition'), FALLBACK_NAME));
 
       setState({ status: 'done', rows });
     } catch {

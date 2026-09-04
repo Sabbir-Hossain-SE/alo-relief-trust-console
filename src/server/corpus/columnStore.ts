@@ -1,4 +1,6 @@
+import { yieldToMain } from '@/lib/file-ingest/yielding';
 import { generateCore } from './generate';
+import { mergeUploadedOrder, uploadedOrder } from './sort';
 
 /**
  * The archive as parallel typed arrays rather than an array of objects. Holding
@@ -26,6 +28,14 @@ export type ColumnStore = {
   readonly sizeBytes: Uint32Array;
   readonly confidence: Float32Array;
   readonly uploadedAt: Float64Array;
+  /**
+   * Every row, newest upload first — the order the grid opens in.
+   *
+   * Kept beside the columns because the default view used to sort the whole
+   * archive on every request to show fifty rows of it. Grows with `size`:
+   * rows an upload appends are folded in as they arrive.
+   */
+  uploadedDesc: Uint32Array;
 };
 
 // Fills one row from the generator.
@@ -53,7 +63,7 @@ function writeRow(store: ColumnStore, index: number): void {
  * front costs about a third of a byte per row and means an upload never has to
  * reallocate and copy twelve typed arrays mid-session.
  */
-export function buildColumnStore(seed: number, size: number, headroom = 0): ColumnStore {
+function allocate(seed: number, size: number, headroom: number): ColumnStore {
   if (!Number.isInteger(size) || size < 0) {
     throw new RangeError(`Archive size must be a non-negative integer, received ${size}`);
   }
@@ -64,7 +74,7 @@ export function buildColumnStore(seed: number, size: number, headroom = 0): Colu
 
   const capacity = size + headroom;
 
-  const store: ColumnStore = {
+  return {
     seed,
     size,
     capacity,
@@ -80,9 +90,43 @@ export function buildColumnStore(seed: number, size: number, headroom = 0): Colu
     sizeBytes: new Uint32Array(capacity),
     confidence: new Float32Array(capacity),
     uploadedAt: new Float64Array(capacity),
+    uploadedDesc: new Uint32Array(0),
   };
+}
+
+export function buildColumnStore(seed: number, size: number, headroom = 0): ColumnStore {
+  const store = allocate(seed, size, headroom);
 
   for (let index = 0; index < size; index += 1) writeRow(store, index);
+  store.uploadedDesc = uploadedOrder(store);
+
+  return store;
+}
+
+/** Rows generated between yields: about a dozen milliseconds each. */
+const BUILD_SLICE = 10_000;
+
+/**
+ * The same archive, built with a breath between slices.
+ *
+ * A hundred thousand rows in one pass is an eighth of a second the page
+ * cannot paint through. Built this way behind the loading gate, it overlaps
+ * the service worker's own start and never lands after the page is up.
+ */
+export async function buildColumnStoreInSlices(
+  seed: number,
+  size: number,
+  headroom = 0,
+): Promise<ColumnStore> {
+  const store = allocate(seed, size, headroom);
+
+  for (let start = 0; start < size; start += BUILD_SLICE) {
+    const end = Math.min(size, start + BUILD_SLICE);
+    for (let index = start; index < end; index += 1) writeRow(store, index);
+    await yieldToMain();
+  }
+
+  store.uploadedDesc = uploadedOrder(store);
 
   return store;
 }
@@ -113,6 +157,7 @@ export function appendDocuments(store: ColumnStore, count: number): Uint32Array 
   }
 
   store.size += count;
+  store.uploadedDesc = mergeUploadedOrder(store, store.uploadedDesc, added);
 
   return added;
 }
@@ -131,7 +176,8 @@ export function storeBytes(store: ColumnStore): number {
     store.locationId.byteLength +
     store.sizeBytes.byteLength +
     store.confidence.byteLength +
-    store.uploadedAt.byteLength
+    store.uploadedAt.byteLength +
+    store.uploadedDesc.byteLength
   );
 }
 

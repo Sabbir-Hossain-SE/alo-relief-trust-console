@@ -42,7 +42,9 @@ export function ExportProgress({ state }: { state: ExportState }) {
       <Box className="flex flex-col gap-1.5">
         <Typography variant="caption" className="figures" sx={{ color: 'text.secondary' }}>
           Preparing the file · {formatBytes(state.received)}
-          {percent === null ? '' : ` of ${formatBytes(state.total ?? 0)} · ${percent}%`}
+          {percent === null
+            ? ''
+            : ` of ${state.approximate ? '≈ ' : ''}${formatBytes(state.total ?? 0)} · ${percent}%`}
         </Typography>
 
         <LinearProgress

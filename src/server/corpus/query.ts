@@ -1,24 +1,21 @@
-import { confidenceBand, type ConfidenceBand } from '@/domain/confidence';
+import { HIGH_CONFIDENCE, MEDIUM_CONFIDENCE, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentSummary, type DocumentType } from '@/domain/document';
 import type { ProcessingErrorCode } from '@/domain/errors';
 import { DEFAULT_PAGE_SIZE } from '@/domain/pagination';
-import { PROCESSING_STATUSES, isExtracted, type ProcessingStatus } from '@/domain/status';
+import { SORT_FIELDS, type SortDirection, type SortField } from '@/domain/sort';
+import {
+  PROCESSING_STATUSES,
+  isExtracted,
+  needsAttention,
+  type ProcessingStatus,
+} from '@/domain/status';
 import type { ColumnStore } from './columnStore';
 import { errorFromId, summaryAt } from './documentAt';
 import type { Overlay } from './overlay';
-import { isSearchable, resolveSearch } from './searchIndex';
+import { isSearchable, resolveSearch, type SearchTargets } from './searchIndex';
+import { sortIndices } from './sort';
 
-export const SORT_FIELDS = [
-  'uploadedAt',
-  'confidence',
-  'personName',
-  'status',
-  'documentType',
-  'index',
-] as const;
-
-export type SortField = (typeof SORT_FIELDS)[number];
-export type SortDirection = 'asc' | 'desc';
+export { SORT_FIELDS, sortIndices, type SortDirection, type SortField };
 
 export type DocumentQuery = {
   status?: readonly ProcessingStatus[];
@@ -48,6 +45,24 @@ export type QueryResult = {
 export { DEFAULT_PAGE_SIZE };
 const MAX_PAGE_SIZE = 200;
 
+/**
+ * Lookups keyed by status id, built once from the domain's own tables.
+ *
+ * The row loop runs a hundred thousand times per request; naming a status,
+ * asking the domain about it and comparing strings on every row cost more
+ * than the filter it was answering for.
+ */
+const STATUS_ID = Object.fromEntries(
+  PROCESSING_STATUSES.map((status, id) => [status, id]),
+) as Record<ProcessingStatus, number>;
+const EXTRACTED_BY_STATUS = Uint8Array.from(PROCESSING_STATUSES, (s) => (isExtracted(s) ? 1 : 0));
+const ATTENTION_BY_STATUS = Uint8Array.from(PROCESSING_STATUSES, (s) =>
+  needsAttention(s) ? 1 : 0,
+);
+
+/** A band as the row loop ranks it: low 0, medium 1, high 2. */
+const BAND_RANK: Record<ConfidenceBand, number> = { low: 0, medium: 1, high: 2 };
+
 // Turns the requested statuses into a lookup keyed by the id stored in a column.
 function statusMask(statuses: readonly ProcessingStatus[] | undefined): Uint8Array | null {
   if (!statuses || statuses.length === 0) return null;
@@ -73,46 +88,66 @@ function typeMask(types: readonly DocumentType[] | undefined): Uint8Array | null
   return mask;
 }
 
+function bandMask(bands: readonly ConfidenceBand[] | undefined): Uint8Array | null {
+  if (!bands || bands.length === 0) return null;
+
+  const mask = new Uint8Array(3);
+  for (const band of bands) mask[BAND_RANK[band]] = 1;
+
+  return mask;
+}
+
+// A term that resolved to no name, no location and no id cannot match a row.
+function matchesNothing(search: SearchTargets): boolean {
+  return (
+    search.nameIds.size === 0 && search.locationIds.size === 0 && search.documentIndex === null
+  );
+}
+
 /**
  * Walks the archive once and collects matching row indices.
  *
  * Filtering reads the typed-array columns directly and writes integers into a
  * Uint32Array, so a full pass over 100,000 documents never allocates a record.
  * Rows are only turned into objects once the page is known.
+ *
+ * Walked in `order` when one is given, so the result comes out already in it —
+ * the newest-first order the grid opens in is kept on the store for exactly
+ * this, and used to be re-sorted from scratch on every request.
  */
-export function filterIndices(
+function collect(
   store: ColumnStore,
   overlay: Overlay,
   query: DocumentQuery,
+  order: Uint32Array | null,
 ): Uint32Array {
   const statuses = statusMask(query.status);
   const types = typeMask(query.documentType);
-  const bands = query.confidence && query.confidence.length > 0 ? new Set(query.confidence) : null;
+  const bands = bandMask(query.confidence);
   const search = isSearchable(query.search) ? resolveSearch(query.search) : null;
   const causes = query.errorCode && query.errorCode.length > 0 ? new Set(query.errorCode) : null;
-  const hasOverlay = overlay.size > 0;
+  const { patches, touched } = overlay;
 
   // Only uploaded documents carry a batch id, so a batch filter can never match
   // anything in the generated archive.
-  if (query.batchId !== undefined && !hasOverlay) return new Uint32Array(0);
+  if (query.batchId !== undefined && patches.size === 0) return new Uint32Array(0);
+  if (search !== null && matchesNothing(search)) return new Uint32Array(0);
 
-  const matched = new Uint32Array(store.size);
+  const matchNames = search !== null && search.nameIds.size > 0;
+  const matchLocations = search !== null && search.locationIds.size > 0;
+  const total = order === null ? store.size : order.length;
+  const matched = new Uint32Array(total);
   let count = 0;
 
-  for (let index = 0; index < store.size; index += 1) {
-    const patch = hasOverlay ? overlay.get(index) : undefined;
-    const statusId = patch?.status
-      ? PROCESSING_STATUSES.indexOf(patch.status)
-      : (store.statusId[index] as number);
+  for (let position = 0; position < total; position += 1) {
+    const index = order === null ? position : (order[position] as number);
+    const patch = touched[index] === 1 ? patches.get(index) : undefined;
+    const statusId = patch?.status ? STATUS_ID[patch.status] : (store.statusId[index] as number);
 
     if (query.batchId !== undefined && patch?.batchId !== query.batchId) continue;
     if (statuses && statuses[statusId] !== 1) continue;
     if (types && types[store.docTypeId[index] as number] !== 1) continue;
-
-    if (query.needsAttention === true) {
-      const status = PROCESSING_STATUSES[statusId] as ProcessingStatus;
-      if (status !== 'failed' && status !== 'needs_review') continue;
-    }
+    if (query.needsAttention === true && ATTENTION_BY_STATUS[statusId] !== 1) continue;
 
     if (causes) {
       // Read the same way `summaryAt` reads it: a patch may have cleared the
@@ -130,14 +165,17 @@ export function filterIndices(
       // read is stored at zero, which would put every pending and failed one
       // in the low band and swell it to several times the figure the overview
       // reports for the same word.
-      const status = PROCESSING_STATUSES[statusId] as ProcessingStatus;
-      if (!isExtracted(status)) continue;
-      if (!bands.has(confidenceBand(store.confidence[index] as number))) continue;
+      if (EXTRACTED_BY_STATUS[statusId] !== 1) continue;
+
+      const score = store.confidence[index] as number;
+      const rank = score >= HIGH_CONFIDENCE ? 2 : score >= MEDIUM_CONFIDENCE ? 1 : 0;
+      if (bands[rank] !== 1) continue;
     }
 
     if (search) {
-      const matchesName = search.nameIds.has(store.nameId[index] as number);
-      const matchesLocation = search.locationIds.has(store.locationId[index] as number);
+      const matchesName = matchNames && search.nameIds.has(store.nameId[index] as number);
+      const matchesLocation =
+        matchLocations && search.locationIds.has(store.locationId[index] as number);
       const matchesId = search.documentIndex === index;
 
       if (!matchesName && !matchesLocation && !matchesId) continue;
@@ -150,50 +188,47 @@ export function filterIndices(
   return matched.subarray(0, count);
 }
 
-// Reads the value a sort compares, straight from the columns.
-function sortValue(store: ColumnStore, index: number, field: SortField): number {
-  switch (field) {
-    case 'uploadedAt':
-      return store.uploadedAt[index] as number;
-    case 'confidence':
-      return store.confidence[index] as number;
-    case 'personName':
-      return store.nameId[index] as number;
-    case 'status':
-      return store.statusId[index] as number;
-    case 'documentType':
-      return store.docTypeId[index] as number;
-    case 'index':
-      return index;
+/** Matching row indices in archive order, ascending by index. */
+export function filterIndices(
+  store: ColumnStore,
+  overlay: Overlay,
+  query: DocumentQuery,
+): Uint32Array {
+  return collect(store, overlay, query, null);
+}
+
+// The kept order has to cover the archive exactly; a stale one would drop
+// every row an upload appended from the default view without a word.
+function uploadedOrder(store: ColumnStore): Uint32Array {
+  if (store.uploadedDesc.length !== store.size) {
+    throw new RangeError(
+      `The upload order covers ${store.uploadedDesc.length} rows of an archive of ${store.size}`,
+    );
   }
+
+  return store.uploadedDesc;
 }
 
 /**
- * Orders matching rows in place. The index is the final tie-break so equal keys
- * never reorder between requests, which would make pagination skip or repeat
- * rows as an operator pages through.
+ * Matching row indices in the order the query asks for.
+ *
+ * The default order — newest upload first — is walked rather than sorted, so
+ * the view the grid opens in costs a filter pass and nothing more. Any other
+ * order is collected and then sorted.
  */
-export function sortIndices(
+export function orderedIndices(
   store: ColumnStore,
-  indices: Uint32Array,
-  field: SortField,
-  direction: SortDirection,
+  overlay: Overlay,
+  query: DocumentQuery,
 ): Uint32Array {
-  const sign = direction === 'desc' ? -1 : 1;
+  const field = query.sortField ?? 'uploadedAt';
+  const direction = query.sortDirection ?? 'desc';
 
-  // Sorting a copy keeps the caller's array, and subarray views, untouched.
-  const ordered = Uint32Array.from(indices);
+  if (field === 'uploadedAt' && direction === 'desc') {
+    return collect(store, overlay, query, uploadedOrder(store));
+  }
 
-  ordered.sort((a, b) => {
-    const left = sortValue(store, a, field);
-    const right = sortValue(store, b, field);
-
-    if (left < right) return -sign;
-    if (left > right) return sign;
-    return a - b;
-  });
-
-  return ordered;
+  return sortIndices(store, collect(store, overlay, query, null), field, direction);
 }
 
 // Clamps a requested page size into something a grid can actually render.
@@ -230,13 +265,7 @@ export function queryDocuments(
   const pageSize = normalizePageSize(query.pageSize);
   const page = normalizePage(query.page);
 
-  const matched = filterIndices(store, overlay, query);
-  const ordered = sortIndices(
-    store,
-    matched,
-    query.sortField ?? 'uploadedAt',
-    query.sortDirection ?? 'desc',
-  );
+  const ordered = orderedIndices(store, overlay, query);
 
   const total = ordered.length;
   const pageCount = Math.ceil(total / pageSize);
@@ -259,10 +288,10 @@ export function countByStatus(
     ProcessingStatus,
     number
   >;
-  const hasOverlay = overlay.size > 0;
+  const { patches, touched } = overlay;
 
   for (let index = 0; index < store.size; index += 1) {
-    const patch = hasOverlay ? overlay.get(index) : undefined;
+    const patch = touched[index] === 1 ? patches.get(index) : undefined;
     const status =
       patch?.status ?? (PROCESSING_STATUSES[store.statusId[index] as number] as ProcessingStatus);
 

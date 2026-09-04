@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import ClearIcon from '@mui/icons-material/Clear';
 import SearchIcon from '@mui/icons-material/Search';
 import IconButton from '@mui/material/IconButton';
@@ -49,16 +49,20 @@ export function DocumentSearch({ value, onChange }: DocumentSearchProps) {
     }
   }
 
+  // Reads the latest `onChange` without being a dependency of the timer. As a
+  // dependency, a parent re-rendering with a fresh callback — once per chunk
+  // during an export — restarted the wait, and a term typed then never landed.
+  const commit = useEffectEvent((term: string) => {
+    setCommitted(term);
+    onChange(term);
+  });
+
   useEffect(() => {
     if (draft === committed) return;
 
-    const timer = setTimeout(() => {
-      setCommitted(draft);
-      onChange(draft);
-    }, DEBOUNCE_MS);
-
+    const timer = setTimeout(() => commit(draft), DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [draft, committed, onChange]);
+  }, [draft, committed]);
 
   return (
     <TextField

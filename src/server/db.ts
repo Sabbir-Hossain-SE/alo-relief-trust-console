@@ -1,10 +1,15 @@
 import { correctField, type ExtractedField } from '@/domain/field';
 import { isRetryable } from '@/domain/errors';
 import type { Correction, NormalizedRecord } from '@/domain/document';
-import { appendDocuments, buildColumnStore, type ColumnStore } from './corpus/columnStore';
+import {
+  appendDocuments,
+  buildColumnStore,
+  buildColumnStoreInSlices,
+  type ColumnStore,
+} from './corpus/columnStore';
 import { DEFAULT_ARCHIVE_SIZE, DEFAULT_SEED } from './corpus/config';
-import { detailAt, summaryAt } from './corpus/documentAt';
-import { applyPatch, createOverlay, type Overlay } from './corpus/overlay';
+import { detailAt, errorCodeAt, statusAt } from './corpus/documentAt';
+import { applyPatch, createOverlay, readPatch, type Overlay } from './corpus/overlay';
 import { advanceBatch, createBatch, requeue, type Batch } from './simulator/batch';
 import { DEFAULT_SIMULATOR_CONFIG, type SimulatorConfig } from './simulator/config';
 
@@ -24,6 +29,8 @@ export type Database = {
   latency: Latency;
   seed: number;
   nextBatchNumber: number;
+  /** Documents already in the reprocessing batch, so a retry never adds one twice. */
+  reprocessMembers: Set<number>;
 };
 
 export type DatabaseOptions = {
@@ -32,21 +39,49 @@ export type DatabaseOptions = {
   latency?: Latency;
 };
 
-function build({ size = DEFAULT_ARCHIVE_SIZE, config, latency }: DatabaseOptions): Database {
+function around(store: ColumnStore, { config, latency }: DatabaseOptions): Database {
   return {
-    store: buildColumnStore(DEFAULT_SEED, size, UPLOAD_HEADROOM),
-    overlay: createOverlay(),
+    store,
+    overlay: createOverlay(store.capacity),
     batches: new Map(),
     config: { ...DEFAULT_SIMULATOR_CONFIG, ...config },
     latency: latency ?? DEMO_LATENCY,
     seed: DEFAULT_SEED,
     nextBatchNumber: 1,
+    reprocessMembers: new Set(),
   };
 }
 
-let database: Database | null = null;
+function build(options: DatabaseOptions): Database {
+  const { size = DEFAULT_ARCHIVE_SIZE } = options;
+  return around(buildColumnStore(DEFAULT_SEED, size, UPLOAD_HEADROOM), options);
+}
 
-// Builds the archive once per process.
+let database: Database | null = null;
+let preparing: Promise<Database> | null = null;
+
+/**
+ * Builds the archive ahead of the first request, with a breath between slices.
+ *
+ * Built lazily inside the first handler, the archive landed as one long task
+ * right after the loading gate had cleared — on top of the grid's first mount.
+ * The boot awaits this beside the worker's own start instead.
+ */
+export function prepareDatabase(): Promise<Database> {
+  if (database !== null) return Promise.resolve(database);
+
+  preparing ??= buildColumnStoreInSlices(DEFAULT_SEED, DEFAULT_ARCHIVE_SIZE, UPLOAD_HEADROOM).then(
+    (store) => {
+      database ??= around(store, {});
+      preparing = null;
+      return database;
+    },
+  );
+
+  return preparing;
+}
+
+// The archive, built on the spot if nothing prepared it.
 export function getDatabase(): Database {
   database ??= build({});
   return database;
@@ -99,19 +134,25 @@ export type RetrySelection = {
  * Splits a set of failed documents into those a retry could help and those it
  * cannot, so the caller can report the skipped ones instead of pretending.
  */
-export function selectRetryable(db: Database, indices: readonly number[]): RetrySelection {
+/**
+ * Splits documents into the failures a retry could clear and the rest.
+ *
+ * One pass over status and cause, read straight from the columns and the
+ * overlay. It used to build a full record per document, twice over for a
+ * batch — once to find its failures and once more to partition them.
+ */
+export function selectRetryable(db: Database, indices: ArrayLike<number>): RetrySelection {
   const retryable: number[] = [];
   let skipped = 0;
 
-  for (const index of indices) {
-    const summary = summaryAt(db.store, db.overlay, index);
+  for (let position = 0; position < indices.length; position += 1) {
+    const index = indices[position] as number;
+    const code =
+      statusAt(db.store, db.overlay, index) === 'failed'
+        ? errorCodeAt(db.store, db.overlay, index)
+        : undefined;
 
-    if (summary.status !== 'failed' || summary.errorCode === undefined) {
-      skipped += 1;
-      continue;
-    }
-
-    if (isRetryable(summary.errorCode)) retryable.push(index);
+    if (code !== undefined && isRetryable(code)) retryable.push(index);
     else skipped += 1;
   }
 
@@ -120,9 +161,20 @@ export function selectRetryable(db: Database, indices: readonly number[]): Retry
 
 // Collects the failed documents belonging to a batch.
 export function failedIn(db: Database, batch: Batch): number[] {
-  return [...batch.indices].filter(
-    (index) => summaryAt(db.store, db.overlay, index).status === 'failed',
-  );
+  const failed: number[] = [];
+
+  for (const index of batch.indices) {
+    if (statusAt(db.store, db.overlay, index) === 'failed') failed.push(index);
+  }
+
+  return failed;
+}
+
+// A document's batch, if it has one, has a split to recount.
+function invalidateBatchSummary(db: Database, index: number): void {
+  const batchId = readPatch(db.overlay, index)?.batchId;
+  const batch = batchId === undefined ? undefined : db.batches.get(batchId);
+  if (batch !== undefined) batch.summary = null;
 }
 
 // Queues documents for another attempt and returns how many were requeued.
@@ -148,20 +200,19 @@ export function sendToManualEntry(db: Database, indices: readonly number[]): Man
   let skipped = 0;
 
   for (const index of indices) {
-    const summary = summaryAt(db.store, db.overlay, index);
-
-    if (summary.status !== 'failed' || summary.errorCode === undefined) {
-      skipped += 1;
-      continue;
-    }
+    const code =
+      statusAt(db.store, db.overlay, index) === 'failed'
+        ? errorCodeAt(db.store, db.overlay, index)
+        : undefined;
 
     // A retryable failure has a cheaper route out than an operator's time.
-    if (isRetryable(summary.errorCode)) {
+    if (code === undefined || isRetryable(code)) {
       skipped += 1;
       continue;
     }
 
     applyPatch(db.overlay, index, { status: 'needs_review' });
+    invalidateBatchSummary(db, index);
     moved += 1;
   }
 
@@ -199,14 +250,15 @@ export function reprocess(db: Database, indices: readonly number[], now = Date.n
   if (indices.length === 0) return 0;
 
   const batch = ensureReprocessBatch(db, now);
-  const known = new Set(batch.indices);
-  const fresh = indices.filter((index) => !known.has(index));
+  const fresh = indices.filter((index) => !db.reprocessMembers.has(index));
 
   if (fresh.length > 0) {
     const merged = new Uint32Array(batch.indices.length + fresh.length);
     merged.set(batch.indices, 0);
     merged.set(Uint32Array.from(fresh), batch.indices.length);
     batch.indices = merged;
+    for (const index of fresh) db.reprocessMembers.add(index);
+    batch.summary = null;
   }
 
   for (const index of indices) applyPatch(db.overlay, index, { batchId: batch.id });
@@ -257,5 +309,6 @@ export function correctDocument(
 
   if (updated.status === 'needs_review' && !stillUncertain) {
     applyPatch(db.overlay, index, { status: 'completed' });
+    invalidateBatchSummary(db, index);
   }
 }

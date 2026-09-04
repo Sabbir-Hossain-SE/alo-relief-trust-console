@@ -1,7 +1,7 @@
 import { isRetryable, type ProcessingErrorCode } from '@/domain/errors';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { ColumnStore } from '../corpus/columnStore';
-import { summaryAt } from '../corpus/documentAt';
+import { errorCodeAt, statusAt } from '../corpus/documentAt';
 import { applyPatch, type Overlay } from '../corpus/overlay';
 import { DEFAULT_SIMULATOR_CONFIG, type SimulatorConfig } from './config';
 import { outcomeFor } from './outcome';
@@ -34,6 +34,19 @@ export type Batch = {
   clock: number;
   finishedCount: number;
   settledAt: number | null;
+  /**
+   * The split of the batch by outcome, or null once a change has made it
+   * stale. Every poll used to walk every document of every batch, settled or
+   * not, to count five numbers; cleared by whatever moves a document, it is
+   * counted once per change instead.
+   */
+  summary: BatchCounts | null;
+};
+
+export type BatchCounts = {
+  counts: Record<ProcessingStatus, number>;
+  failures: FailureGroup[];
+  retryableFailures: number;
 };
 
 /** One cause of failure within a batch, and whether a retry could clear it. */
@@ -95,6 +108,7 @@ export function createBatch(
     clock: createdAt,
     finishedCount: 0,
     settledAt: indices.length === 0 ? createdAt : null,
+    summary: null,
   };
 }
 
@@ -174,6 +188,7 @@ function finishDue(
 
     batch.inFlight.delete(index);
     batch.finishedCount += 1;
+    batch.summary = null;
   }
 }
 
@@ -193,6 +208,7 @@ function startPending(overlay: Overlay, batch: Batch, now: number, config: Simul
     });
 
     batch.inFlight.set(index, now + config.serviceTimeMs);
+    batch.summary = null;
   }
 }
 
@@ -217,6 +233,7 @@ export function requeue(batch: Batch, overlay: Overlay, indices: readonly number
   batch.queue = merged;
   batch.cursor = 0;
   batch.settledAt = null;
+  batch.summary = null;
 
   for (const index of indices) {
     applyPatch(overlay, index, { status: 'pending', errorCode: null });
@@ -232,12 +249,11 @@ export function requeue(batch: Batch, overlay: Overlay, indices: readonly number
  * every status rather than collapsing to a pass/fail the interface would then
  * have to un-collapse.
  */
-export function summarizeBatch(
-  store: ColumnStore,
-  overlay: Overlay,
-  batch: Batch,
-  now: number,
-): BatchSummary {
+/**
+ * Counts the batch by outcome, reading status and cause straight from the
+ * columns and the overlay rather than building a record per document.
+ */
+function countBatch(store: ColumnStore, overlay: Overlay, batch: Batch): BatchCounts {
   const counts = Object.fromEntries(PROCESSING_STATUSES.map((status) => [status, 0])) as Record<
     ProcessingStatus,
     number
@@ -249,11 +265,12 @@ export function summarizeBatch(
   const byCause = new Map<ProcessingErrorCode, number>();
 
   for (const index of batch.indices) {
-    const summary = summaryAt(store, overlay, index);
-    counts[summary.status] += 1;
+    const status = statusAt(store, overlay, index);
+    counts[status] += 1;
 
-    if (summary.status === 'failed' && summary.errorCode !== undefined) {
-      byCause.set(summary.errorCode, (byCause.get(summary.errorCode) ?? 0) + 1);
+    if (status === 'failed') {
+      const code = errorCodeAt(store, overlay, index);
+      if (code !== undefined) byCause.set(code, (byCause.get(code) ?? 0) + 1);
     }
   }
 
@@ -265,6 +282,18 @@ export function summarizeBatch(
     (running, group) => (group.retryable ? running + group.count : running),
     0,
   );
+
+  return { counts, failures, retryableFailures };
+}
+
+export function summarizeBatch(
+  store: ColumnStore,
+  overlay: Overlay,
+  batch: Batch,
+  now: number,
+): BatchSummary {
+  batch.summary ??= countBatch(store, overlay, batch);
+  const { counts, failures, retryableFailures } = batch.summary;
 
   const total = batch.indices.length;
   const settled = isSettled(batch);

@@ -58,43 +58,47 @@ export function createUploadQueue<T extends QueueItem>(
   const maxDelayMs = options.maxDelayMs ?? DEFAULTS.maxDelayMs;
   const sleep = options.sleep ?? defaultSleep;
 
-  const tasks = new Map<string, QueueTask>(
-    items.map((item) => [
-      item.id,
-      { id: item.id, label: item.label, status: 'queued', attempts: 0, progress: 0 },
-    ]),
-  );
+  /**
+   * One task object per position, replaced in place as it changes. A snapshot
+   * hands out this same list, so a row that has not changed keeps its
+   * identity and a hundred of them do not become a hundred new objects five
+   * times per file — which, over tens of thousands of files, was a queue that
+   * spent its time describing itself.
+   */
+  const tasks: QueueTask[] = items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    status: 'queued',
+    attempts: 0,
+    progress: 0,
+  }));
+  const positionOf = new Map(items.map((item, position) => [item.id, position]));
 
   const byId = new Map(items.map((item) => [item.id, item]));
-  const pending = items.map((item) => item.id);
   const controllers = new Map<string, AbortController>();
 
   const queueController = new AbortController();
   let paused = false;
   let running = 0;
+  // Every task ends in exactly one of these, so they are counted as it does.
+  let succeeded = 0;
+  let failed = 0;
+  let cancelled = 0;
+  // Work is taken from the front by moving a head, not by shifting the array.
+  let head = 0;
   let resumeWaiters: (() => void)[] = [];
 
-  function counts() {
-    let succeeded = 0;
-    let failed = 0;
-    let cancelled = 0;
-
-    for (const task of tasks.values()) {
-      if (task.status === 'succeeded') succeeded += 1;
-      else if (task.status === 'failed') failed += 1;
-      else if (task.status === 'cancelled') cancelled += 1;
-    }
-
-    return { succeeded, failed, cancelled };
+  function taskOf(id: string): QueueTask | undefined {
+    const position = positionOf.get(id);
+    return position === undefined ? undefined : tasks[position];
   }
 
   function snapshot(): QueueSnapshot {
-    const { succeeded, failed, cancelled } = counts();
-    const total = tasks.size;
+    const total = tasks.length;
     const finished = succeeded + failed + cancelled;
 
     return {
-      tasks: [...tasks.values()],
+      tasks,
       total,
       succeeded,
       failed,
@@ -111,10 +115,16 @@ export function createUploadQueue<T extends QueueItem>(
   }
 
   function update(id: string, patch: Partial<QueueTask>) {
-    const task = tasks.get(id);
-    if (task === undefined || FINAL.includes(task.status)) return;
+    const position = positionOf.get(id);
+    const task = position === undefined ? undefined : tasks[position];
+    if (position === undefined || task === undefined || FINAL.includes(task.status)) return;
 
-    tasks.set(id, { ...task, ...patch });
+    const next = { ...task, ...patch };
+    tasks[position] = next;
+
+    if (next.status === 'succeeded') succeeded += 1;
+    else if (next.status === 'failed') failed += 1;
+    else if (next.status === 'cancelled') cancelled += 1;
   }
 
   /** Blocks a worker while paused, without abandoning its slot. */
@@ -133,7 +143,7 @@ export function createUploadQueue<T extends QueueItem>(
     for (let tryNumber = 1; tryNumber <= maxAttempts; tryNumber += 1) {
       await waitWhilePaused();
 
-      if (queueController.signal.aborted || tasks.get(item.id)?.status === 'cancelled') {
+      if (queueController.signal.aborted || taskOf(item.id)?.status === 'cancelled') {
         update(item.id, { status: 'cancelled' });
         return;
       }
@@ -187,10 +197,9 @@ export function createUploadQueue<T extends QueueItem>(
 
       if (queueController.signal.aborted) return;
 
-      const id = pending.shift();
-      if (id === undefined) return;
-
-      const item = byId.get(id);
+      if (head >= tasks.length) return;
+      const item = byId.get((tasks[head] as QueueTask).id);
+      head += 1;
       if (item === undefined) continue;
 
       running += 1;
@@ -241,25 +250,23 @@ export function createUploadQueue<T extends QueueItem>(
       queueController.abort();
       for (const controller of controllers.values()) controller.abort();
 
-      for (const task of tasks.values()) {
-        if (!FINAL.includes(task.status)) tasks.set(task.id, { ...task, status: 'cancelled' });
+      for (const task of tasks) {
+        if (!FINAL.includes(task.status)) update(task.id, { status: 'cancelled' });
       }
 
-      pending.length = 0;
+      head = tasks.length;
       paused = false;
       releasePaused();
       emit();
     },
 
     cancelTask(id: string) {
-      const task = tasks.get(id);
+      const task = taskOf(id);
       if (task === undefined || FINAL.includes(task.status)) return;
 
-      tasks.set(id, { ...task, status: 'cancelled' });
+      // A worker that reaches it later finds it cancelled and passes it by.
+      update(id, { status: 'cancelled' });
       controllers.get(id)?.abort();
-
-      const queuedAt = pending.indexOf(id);
-      if (queuedAt >= 0) pending.splice(queuedAt, 1);
 
       emit();
     },

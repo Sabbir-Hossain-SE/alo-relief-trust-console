@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import LinearProgress from '@mui/material/LinearProgress';
@@ -18,7 +19,9 @@ import { formatCount, formatPercent } from '@/lib/format/number';
 const ROW_HEIGHT = 44;
 const LIST_HEIGHT = 320;
 
-function TaskRow({ task }: { task: QueueTask }) {
+// Memoised on purpose: the list renders once per frame while files move, and
+// only the handful in flight change between one frame and the next.
+const TaskRow = memo(function TaskRow({ task }: { task: QueueTask }) {
   return (
     <Box className="flex items-center gap-3 px-3" sx={{ height: ROW_HEIGHT }}>
       <Box className="w-5 shrink-0">
@@ -36,11 +39,9 @@ function TaskRow({ task }: { task: QueueTask }) {
 
       <Box className="w-40 shrink-0">
         {task.status === 'running' ? (
-          <LinearProgress
-            variant="determinate"
-            value={task.progress * 100}
-            aria-label={`Uploading ${task.label}`}
-          />
+          // Indeterminate: the transport reports no bytes, and a bar held at a
+          // made-up fraction would be a claim about progress nobody measured.
+          <LinearProgress aria-label={`Uploading ${task.label}`} />
         ) : (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {task.status === 'waiting'
@@ -57,7 +58,7 @@ function TaskRow({ task }: { task: QueueTask }) {
       </Box>
     </Box>
   );
-}
+});
 
 type UploadQueueListProps = {
   snapshot: QueueSnapshot;

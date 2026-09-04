@@ -14,11 +14,28 @@ import { isCancelled, yieldToMain } from './yielding';
 export type WalkOptions = {
   signal?: AbortSignal;
   onProgress?: (progress: IngestProgress) => void;
-  /** Entries handled between yields. Lower keeps the UI smoother. */
+  /** At most this many entries between yields. */
   chunkSize?: number;
+  /**
+   * At most this long between yields. A count alone could not bound a frame:
+   * the picker's files cost real getter calls each, and two hundred of them
+   * held the thread for most of a fifth of a second.
+   */
+  budgetMs?: number;
 };
 
 const DEFAULT_CHUNK_SIZE = 200;
+const DEFAULT_BUDGET_MS = 5;
+
+// Whether the chunk in hand has used up its count or its time.
+function chunkIsFull(
+  sinceYield: number,
+  chunkSize: number,
+  since: number,
+  budgetMs: number,
+): boolean {
+  return sinceYield >= chunkSize || performance.now() - since >= budgetMs;
+}
 
 function readFile(entry: FsFileEntry): Promise<File | null> {
   return new Promise((resolve) => {
@@ -33,16 +50,25 @@ function readFile(entry: FsFileEntry): Promise<File | null> {
  * empty array, so it has to be called in a loop. Reading it once is the classic
  * way to silently lose most of a large folder.
  */
-async function readDirectory(reader: FsDirectoryReader): Promise<FsEntry[]> {
+async function readDirectory(
+  reader: FsDirectoryReader,
+  signal: AbortSignal | undefined,
+  onBatch: () => void,
+): Promise<FsEntry[]> {
   const all: FsEntry[] = [];
 
   for (;;) {
+    // A flat folder of twenty thousand files is two hundred of these calls,
+    // and a cancel that could only land between folders was no cancel at all.
+    if (isCancelled(signal)) return all;
+
     const batch = await new Promise<FsEntry[]>((resolve) => {
       reader.readEntries(resolve, () => resolve([]));
     });
 
     if (batch.length === 0) return all;
     all.push(...batch);
+    onBatch();
   }
 }
 
@@ -57,7 +83,12 @@ export async function walkEntries(
   roots: readonly FsEntry[],
   options: WalkOptions = {},
 ): Promise<IngestResult> {
-  const { signal, onProgress, chunkSize = DEFAULT_CHUNK_SIZE } = options;
+  const {
+    signal,
+    onProgress,
+    chunkSize = DEFAULT_CHUNK_SIZE,
+    budgetMs = DEFAULT_BUDGET_MS,
+  } = options;
 
   const files: IngestedFile[] = [];
   const rejections: RejectedFile[] = [];
@@ -65,6 +96,7 @@ export async function walkEntries(
 
   let scanned = 0;
   let sinceYield = 0;
+  let chunkStart = performance.now();
 
   const report = () =>
     onProgress?.({ scanned, accepted: files.length, rejected: rejections.length });
@@ -87,7 +119,11 @@ export async function walkEntries(
     sinceYield += 1;
 
     if (entry.isDirectory) {
-      const children = await readDirectory((entry as FsDirectoryEntry).createReader());
+      const children = await readDirectory(
+        (entry as FsDirectoryEntry).createReader(),
+        signal,
+        report,
+      );
       // Reversed so the stack pops them in the order they were listed.
       for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i] as FsEntry);
     } else {
@@ -103,10 +139,11 @@ export async function walkEntries(
       }
     }
 
-    if (sinceYield >= chunkSize) {
+    if (chunkIsFull(sinceYield, chunkSize, chunkStart, budgetMs)) {
       sinceYield = 0;
       report();
       await yieldToMain();
+      chunkStart = performance.now();
     }
   }
 
@@ -153,7 +190,14 @@ export async function ingestFileList(
   fileList: readonly File[],
   options: WalkOptions = {},
 ): Promise<IngestResult> {
-  const { signal, onProgress, chunkSize = DEFAULT_CHUNK_SIZE } = options;
+  const {
+    signal,
+    onProgress,
+    chunkSize = DEFAULT_CHUNK_SIZE,
+    budgetMs = DEFAULT_BUDGET_MS,
+  } = options;
+  let chunkStart = performance.now();
+  let sinceYield = 0;
 
   const files: IngestedFile[] = [];
   const rejections: RejectedFile[] = [];
@@ -184,9 +228,12 @@ export async function ingestFileList(
     if (reason === null) files.push({ path, name: file.name, size: file.size });
     else rejections.push({ path, reason });
 
-    if ((index + 1) % chunkSize === 0) {
+    sinceYield += 1;
+    if (chunkIsFull(sinceYield, chunkSize, chunkStart, budgetMs)) {
+      sinceYield = 0;
       report();
       await yieldToMain();
+      chunkStart = performance.now();
     }
   }
 

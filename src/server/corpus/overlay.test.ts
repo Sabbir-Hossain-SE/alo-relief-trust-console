@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Correction } from '@/domain/document';
-import { applyPatch, createOverlay, readPatch } from './overlay';
+import { applyPatch, createOverlay, isTouched, readPatch } from './overlay';
 
 function correction(field: Correction['field'], next: string): Correction {
   return { field, next, correctedAt: 1_700_000_000_000 };
@@ -92,6 +92,26 @@ describe('overlay', () => {
   });
 
   it('stays empty until something actually changes', () => {
-    expect(createOverlay().size).toBe(0);
+    expect(createOverlay().patches.size).toBe(0);
+  });
+});
+
+describe('touched rows', () => {
+  it('marks a patched row and no other', () => {
+    const overlay = createOverlay(8);
+    applyPatch(overlay, 3, { status: 'completed' });
+
+    expect(isTouched(overlay, 3)).toBe(true);
+    expect(isTouched(overlay, 2)).toBe(false);
+    expect(readPatch(overlay, 2)).toBeUndefined();
+  });
+
+  it('grows to a row past its starting capacity', () => {
+    const overlay = createOverlay(4);
+    applyPatch(overlay, 9000, { status: 'failed' });
+
+    expect(isTouched(overlay, 9000)).toBe(true);
+    expect(readPatch(overlay, 9000)?.status).toBe('failed');
+    expect(isTouched(overlay, 8999)).toBe(false);
   });
 });

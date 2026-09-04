@@ -1,7 +1,9 @@
 'use client';
 
+import { useCallback } from 'react';
 import Box from '@mui/material/Box';
 import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
+import type { DocumentSummary } from '@/domain/document';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { DensityToggle } from './components/DensityToggle';
@@ -16,6 +18,11 @@ import { useDocumentQuery } from './useDocumentQuery';
 export function DocumentsView() {
   const { query, update, clear, isFiltered, selectedId, select } = useDocumentQuery();
   const { state, start, cancel } = useCsvExport();
+
+  // Stable for as long as the query is, so the export's progress — a render of
+  // this view per chunk — stops at the grid's memo boundary instead of
+  // re-rendering the DataGrid a hundred times a second.
+  const open = useCallback((row: DocumentSummary) => select(row.id), [select]);
 
   return (
     <PageSections>
@@ -43,7 +50,7 @@ export function DocumentsView() {
             changing a filter clears the failure rather than leaving the notice
             in place until a reload. */}
         <ErrorBoundary title="The documents could not be listed" resetKey={JSON.stringify(query)}>
-          <DocumentsGrid onOpen={(row) => select(row.id)} />
+          <DocumentsGrid onOpen={open} />
         </ErrorBoundary>
       </Box>
 

@@ -22,6 +22,12 @@ export function useMockApiReady(): boolean {
   return useContext(BootContext) === 'ready';
 }
 
+// Started as the module parses rather than in an effect after hydration, so
+// the worker's own chunk — a hundred kilobytes the gate waits on — is fetched
+// beside the page's rather than a commit after it. Cached inside, so the
+// effect below joins the same start.
+if (typeof window !== 'undefined') void startMockApi().catch(() => undefined);
+
 /** Starts the mock backend once and publishes how far along it is. */
 export function MockApiProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BootState>('starting');

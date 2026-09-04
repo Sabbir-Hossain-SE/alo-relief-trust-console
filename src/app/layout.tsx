@@ -8,10 +8,13 @@ import { StoreProvider } from '@/store/StoreProvider';
 import { ThemeRegistry } from '@/theme/ThemeRegistry';
 import './globals.css';
 
+// The wordmark's face and nothing else's. Without the optical axes nothing
+// here ever varies, and unpreloaded it no longer competes with the body text
+// for the first bytes of every route — a logo may swap in a moment late.
 const display = Fraunces({
   variable: '--font-display',
   subsets: ['latin'],
-  axes: ['SOFT', 'WONK'],
+  preload: false,
 });
 
 const body = Inter({

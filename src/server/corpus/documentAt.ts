@@ -111,20 +111,40 @@ function corrected(
 }
 
 /** Reads the grid row for a document, with any recorded changes applied. */
+/** A document's status, the overlay's word over the column's. */
+export function statusAt(store: ColumnStore, overlay: Overlay, index: number): ProcessingStatus {
+  return (
+    readPatch(overlay, index)?.status ??
+    (PROCESSING_STATUSES[store.statusId[index] as number] as ProcessingStatus)
+  );
+}
+
+/**
+ * A document's failure code, if it has one.
+ *
+ * A patch may have cleared the generated error, so a retried document must not
+ * still report its old cause.
+ */
+export function errorCodeAt(
+  store: ColumnStore,
+  overlay: Overlay,
+  index: number,
+): ProcessingErrorCode | undefined {
+  const patch = readPatch(overlay, index);
+  return patch?.errorCode === null
+    ? undefined
+    : (patch?.errorCode ?? errorFromId(store.errorId[index] as number));
+}
+
 export function summaryAt(store: ColumnStore, overlay: Overlay, index: number): DocumentSummary {
   assertInRange(store, index);
 
   const patch = readPatch(overlay, index);
-  const status =
-    patch?.status ?? (PROCESSING_STATUSES[store.statusId[index] as number] as ProcessingStatus);
+  const status = statusAt(store, overlay, index);
   const docTypeId = store.docTypeId[index] as number;
   const pageCount = store.pageCount[index] as number;
   const hasValues = status === 'completed' || status === 'needs_review';
-
-  const errorCode =
-    patch?.errorCode === null
-      ? undefined
-      : (patch?.errorCode ?? errorFromId(store.errorId[index] as number));
+  const errorCode = errorCodeAt(store, overlay, index);
 
   return {
     id: documentId(index),
