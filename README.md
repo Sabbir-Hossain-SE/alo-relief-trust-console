@@ -434,9 +434,26 @@ Bengali for **light**, and these are not server logs — they are enrollment for
 intake sheets and ID scans belonging to real people, handled by an operator doing patient,
 high-volume work for hours.
 
-Fraunces for display figures, Inter for the interface, JetBrains Mono with tabular figures for
-identifiers and counts so numbers do not jitter as they tick up. Motion is slow, and only ever
-communicates a state change.
+Inter for the whole interface — headings included — with JetBrains Mono and tabular figures for
+identifiers, counts and timestamps so numbers do not jitter as they tick up. Fraunces is still
+loaded and appears in exactly one place: the wordmark, which is a logo rather than a heading.
+One family for the interface means the hierarchy has to come from size, weight and tracking, so
+the headings carry negative letter-spacing that tightens as they grow — Inter left at its
+default spacing reads as loose at 40px beside 14px body text, which is how a single-family scale
+ends up looking accidental rather than chosen.
+
+Motion is slow, and only ever communicates a state change.
+
+Spacing has one owner per level. `PageSections` sets the distance between a page's top-level
+blocks and `SECTION_CONTENT_GAP` the distance inside one, at half of it, so "these belong
+together" and "these are separate things" read as different distances. The alternative — a
+bottom margin on the header, another on one panel, a top margin on the next — is how a page ends
+up with four gaps that all look like mistakes, which is what this one had.
+
+Both scrolling regions are sized in whole rows. A fixed height cuts the last row in half
+wherever it happens to land, which reads as a rendering fault rather than as a scroll
+affordance; in the grid it also moved with the density toggle, so it could not be corrected with
+one number.
 
 The mark is a sun rising over a horizon that doubles as the edge of a page. Only the horizon
 follows the theme — through the palette, so it tracks the in-app toggle rather than only the
