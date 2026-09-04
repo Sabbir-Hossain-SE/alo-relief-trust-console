@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
@@ -29,6 +29,31 @@ function countryCodeLabel(code: CountryCode): string {
 }
 
 /**
+ * The menu's two hundred and forty-five items, built once.
+ *
+ * MUI's select clones every child it is given on every render, open or not,
+ * so a list rebuilt per keystroke cost the field a few hundred elements and
+ * closures each time a digit was typed.
+ */
+const COUNTRY_OPTIONS = PHONE_COUNTRIES.map((option) => (
+  <MenuItem key={option.code} value={option.code}>
+    {option.name} +{option.callingCode}
+  </MenuItem>
+));
+
+// An example number per country, parsed once rather than on every render.
+const placeholders = new Map<CountryCode, string>();
+
+function placeholderFor(country: CountryCode): string {
+  let placeholder = placeholders.get(country);
+  if (placeholder === undefined) {
+    placeholder = nationalPlaceholder(country);
+    placeholders.set(country, placeholder);
+  }
+  return placeholder;
+}
+
+/**
  * A phone number as its two real parts: which country issues it, and the
  * national digits.
  *
@@ -47,9 +72,15 @@ export function PhoneField({ label, labelId, value, error, onChange, onBlur }: P
   // An international number still being typed is shown as typed. It has no
   // country to read yet, and split as a national number it lost its plus on
   // the first keystroke and came out behind the wrong calling code.
-  const { country, national } = isPendingInternational(value)
-    ? { country: chosen, national: value }
-    : splitPhone(value, chosen);
+  // Two parses of the numbering plans, so they happen when the value moves
+  // rather than on every render the form causes around this field.
+  const { country, national } = useMemo(
+    () =>
+      isPendingInternational(value)
+        ? { country: chosen, national: value }
+        : splitPhone(value, chosen),
+    [value, chosen],
+  );
 
   const change = (nextCountry: CountryCode, digits: string) => {
     setChosen(nextCountry);
@@ -91,11 +122,7 @@ export function PhoneField({ label, labelId, value, error, onChange, onBlur }: P
           },
         }}
       >
-        {PHONE_COUNTRIES.map((option) => (
-          <MenuItem key={option.code} value={option.code}>
-            {option.name} +{option.callingCode}
-          </MenuItem>
-        ))}
+        {COUNTRY_OPTIONS}
       </TextField>
 
       <TextField
@@ -106,7 +133,7 @@ export function PhoneField({ label, labelId, value, error, onChange, onBlur }: P
         // formatter that sometimes emits the calling code turns that into a
         // number that grows a country code per keystroke.
         value={national}
-        placeholder={nationalPlaceholder(country)}
+        placeholder={placeholderFor(country)}
         onChange={(event) => changeDigits(event.target.value)}
         onBlur={onBlur}
         error={error !== undefined}
