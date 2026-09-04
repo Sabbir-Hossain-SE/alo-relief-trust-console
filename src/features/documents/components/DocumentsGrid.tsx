@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import type { DocumentSummary } from '@/domain/document';
 import { PAGE_SIZE_OPTIONS, gridPageSize } from '@/domain/pagination';
-import { type SortField } from '@/server/corpus/query';
+import { SORT_FIELDS } from '@/server/corpus/query';
 import { useDocuments } from '@/store/polling';
 import { usePreferences } from '@/store/usePreferences';
 import { useDocumentQuery } from '../useDocumentQuery';
@@ -79,10 +79,13 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
   const handleSort = useCallback(
     (model: GridSortModel) => {
       const next = model[0];
+      // Checked rather than cast: a column the engine cannot sort by must not
+      // reach the URL, where the server would drop it and keep the direction.
+      const field = SORT_FIELDS.find((candidate) => candidate === next?.field);
       update(
-        next === undefined
+        next === undefined || field === undefined
           ? { sortField: undefined, sortDirection: undefined }
-          : { sortField: next.field as SortField, sortDirection: next.sort ?? 'desc' },
+          : { sortField: field, sortDirection: next.sort ?? 'desc' },
       );
     },
     [update],

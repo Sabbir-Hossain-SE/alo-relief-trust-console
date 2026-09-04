@@ -38,6 +38,17 @@ export function isActive(status: ProcessingStatus): boolean {
 }
 
 // Reports whether a status needs an operator to do something.
+/**
+ * Whether the pipeline has produced fields for the document.
+ *
+ * Only an extracted document has a confidence worth the name: the rest are
+ * stored at zero, which is honest for sorting and a lie anywhere it is read as
+ * a score.
+ */
+export function isExtracted(status: ProcessingStatus): boolean {
+  return status === 'completed' || status === 'needs_review';
+}
+
 export function needsAttention(status: ProcessingStatus): boolean {
   return status === 'failed' || status === 'needs_review';
 }

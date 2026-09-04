@@ -77,13 +77,28 @@ describe('filtering', () => {
     }
   });
 
-  it('filters by confidence band', () => {
+  it('filters by confidence band, over extracted documents only', () => {
     const indices = filterIndices(store, empty, { confidence: ['low'] });
 
     expect(indices.length).toBeGreaterThan(0);
     for (const index of indices) {
       expect(confidenceBand(store.confidence[index] as number)).toBe('low');
+      expect(['completed', 'needs_review']).toContain(statusOf(index));
     }
+  });
+
+  /**
+   * A document the pipeline never read is stored at zero, which is the low
+   * band by arithmetic. Counted, every pending and failed document joined the
+   * band and the grid showed four times the figure the overview gave it.
+   */
+  it('never puts a document that was not extracted in a confidence band', () => {
+    expect(filterIndices(store, empty, { confidence: ['low'], status: ['pending'] })).toHaveLength(
+      0,
+    );
+    expect(
+      filterIndices(store, empty, { confidence: ['low', 'medium', 'high'], status: ['failed'] }),
+    ).toHaveLength(0);
   });
 
   it('narrows to documents an operator has to act on', () => {

@@ -7,6 +7,7 @@ import { ConfidenceMeter } from '@/components/data/ConfidenceMeter';
 import { StatusChip } from '@/components/data/StatusChip';
 import { DOCUMENT_TYPE_LABELS, type DocumentSummary } from '@/domain/document';
 import { describeError } from '@/domain/errors';
+import { isExtracted } from '@/domain/status';
 import { formatDate } from '@/lib/format/date';
 
 // Values the pipeline has not produced yet, shown as absent rather than as zero.
@@ -40,6 +41,10 @@ export const documentColumns: GridColDef<DocumentSummary>[] = [
     headerName: 'ID',
     width: 130,
     filterable: false,
+    // Not among the sorts the query engine performs. Offered anyway, the click
+    // wrote a sort the server dropped, and the header arrows described an
+    // order the rows were not in.
+    sortable: false,
     renderCell: ({ row }) => <Mono>{row.id}</Mono>,
   },
   {
@@ -99,8 +104,7 @@ export const documentColumns: GridColDef<DocumentSummary>[] = [
     renderCell: ({ row }) => {
       // A document that was never extracted has no confidence, and rendering it
       // as 0% would read as "certainly wrong" rather than "not attempted".
-      const extracted = row.status === 'completed' || row.status === 'needs_review';
-      return extracted ? <ConfidenceMeter score={row.confidence} /> : <Absent />;
+      return isExtracted(row.status) ? <ConfidenceMeter score={row.confidence} /> : <Absent />;
     },
   },
   {

@@ -2,7 +2,7 @@ import { confidenceBand, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentSummary, type DocumentType } from '@/domain/document';
 import type { ProcessingErrorCode } from '@/domain/errors';
 import { DEFAULT_PAGE_SIZE } from '@/domain/pagination';
-import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
+import { PROCESSING_STATUSES, isExtracted, type ProcessingStatus } from '@/domain/status';
 import type { ColumnStore } from './columnStore';
 import { errorFromId, summaryAt } from './documentAt';
 import type { Overlay } from './overlay';
@@ -125,7 +125,15 @@ export function filterIndices(
       if (code === undefined || !causes.has(code)) continue;
     }
 
-    if (bands && !bands.has(confidenceBand(store.confidence[index] as number))) continue;
+    if (bands) {
+      // A confidence belongs to an extraction. A document the pipeline has not
+      // read is stored at zero, which would put every pending and failed one
+      // in the low band and swell it to several times the figure the overview
+      // reports for the same word.
+      const status = PROCESSING_STATUSES[statusId] as ProcessingStatus;
+      if (!isExtracted(status)) continue;
+      if (!bands.has(confidenceBand(store.confidence[index] as number))) continue;
+    }
 
     if (search) {
       const matchesName = search.nameIds.has(store.nameId[index] as number);

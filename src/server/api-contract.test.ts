@@ -54,6 +54,13 @@ describe('fromSearchParams', () => {
     expect(parse('sort=confidence&dir=sideways')).toEqual({ sortField: 'confidence' });
   });
 
+  // Kept on its own, a direction turned the default sort the other way round
+  // while the header arrow still described the default.
+  it('drops a direction whose field it does not know', () => {
+    expect(parse('sort=bogus&dir=asc')).toEqual({});
+    expect(parse('dir=asc&q=rahim')).toEqual({ search: 'rahim' });
+  });
+
   it('round-trips through toSearchParams', () => {
     const query = parse(
       'status=failed&cause=password_protected&batch=batch-1&attention=1&sort=uploadedAt&dir=desc',

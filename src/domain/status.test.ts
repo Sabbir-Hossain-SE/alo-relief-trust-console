@@ -3,6 +3,7 @@ import {
   PROCESSING_STATUSES,
   canTransition,
   isActive,
+  isExtracted,
   needsAttention,
   type ProcessingStatus,
 } from './status';
@@ -81,5 +82,11 @@ describe('needsAttention', () => {
     for (const status of PROCESSING_STATUSES) {
       expect(isActive(status) && needsAttention(status)).toBe(false);
     }
+  });
+});
+
+describe('isExtracted', () => {
+  it('is true only where the pipeline has produced fields to be confident about', () => {
+    expect(PROCESSING_STATUSES.filter(isExtracted)).toEqual(['completed', 'needs_review']);
   });
 });

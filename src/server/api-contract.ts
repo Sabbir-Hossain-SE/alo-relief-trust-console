@@ -209,5 +209,9 @@ export function fromSearchParams(params: URLSearchParams): DocumentQueryInput {
     if (parsed.success && parsed.data !== undefined) query[key] = parsed.data;
   }
 
+  // A direction means nothing without a field. Kept on its own it turned the
+  // default sort the other way round while the header arrow said otherwise.
+  if (query.sortField === undefined) delete query.sortDirection;
+
   return query as DocumentQueryInput;
 }
