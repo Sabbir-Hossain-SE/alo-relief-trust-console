@@ -159,3 +159,27 @@ test('opens the navigation as a drawer on a small screen', async ({ page }) => {
   await page.getByRole('link', { name: 'Batches' }).click();
   await expect(page).toHaveURL(/\/batches$/);
 });
+
+/**
+ * The drawer exists only below `md`; past it the rail takes over and the
+ * drawer is merely hidden. Left open across the change it kept the page
+ * scroll-locked and hidden from assistive technology behind a backdrop nobody
+ * could see or dismiss.
+ */
+test('lets the page go when the drawer is widened out of existence', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 });
+  await open(page, '/documents');
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  const drawer = page.getByRole('presentation').filter({ has: page.getByRole('navigation') });
+  await expect(drawer.getByRole('link', { name: 'Review queue' })).toBeVisible();
+
+  await page.setViewportSize({ width: 1300, height: 900 });
+
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('');
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.querySelector('main')?.closest('[aria-hidden="true"]') === null),
+    )
+    .toBe(true);
+});
