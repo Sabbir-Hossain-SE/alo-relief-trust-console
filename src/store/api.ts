@@ -44,7 +44,9 @@ export const api = createApi({
 
     getDocuments: build.query<QueryResult, DocumentQueryInput>({
       query: (input) => `/documents?${toSearchParams(input).toString()}`,
-      providesTags: ['Document'],
+      // Named, so a correction can refresh the lists without also refetching
+      // the record whose new state it already holds.
+      providesTags: [{ type: 'Document', id: 'LIST' }],
     }),
 
     getDocument: build.query<DocumentDetail, string>({
@@ -58,13 +60,15 @@ export const api = createApi({
         method: 'PATCH',
         body,
       }),
+      // The response is the corrected record, so the drawer reads it from the
+      // cache at once instead of asking for it again a round trip later.
+      async onQueryStarted({ id }, { dispatch, queryFulfilled }) {
+        const { data } = await queryFulfilled;
+        dispatch(api.util.updateQueryData('getDocument', id, () => data));
+      },
       // A correction can resolve the review that put the document in the queue,
-      // so the list and the counts both change, not just this record.
-      invalidatesTags: (_result, _error, { id }) => [
-        { type: 'Document', id },
-        'Document',
-        'Summary',
-      ],
+      // so the lists and the counts still change, not just this record.
+      invalidatesTags: [{ type: 'Document', id: 'LIST' }, 'Summary'],
     }),
 
     retryDocument: build.mutation<RetryResult, string>({
