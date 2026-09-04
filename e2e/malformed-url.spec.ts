@@ -47,6 +47,19 @@ for (const query of MALFORMED) {
   });
 }
 
+/**
+ * A link saved before a status was renamed carries one value the schema no
+ * longer knows beside the ones it still does. Failing the whole query showed
+ * the entire archive under a filter bar that said nothing was applied.
+ */
+test('keeps the filters it can read beside one it cannot', async ({ page }) => {
+  await open(page, '/documents?status=completed&status=bogus&type=id_scan&q=rah');
+
+  await expect(page.getByRole('button', { name: 'Completed', pressed: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Search documents' })).toHaveValue('rah');
+  await expect(page.getByRole('combobox', { name: 'Type' })).toHaveText('ID scan');
+});
+
 /** A page size the grid cannot render falls back to one it can. */
 test('serves a page it can show when the address asks for one it cannot', async ({ page }) => {
   await open(page, '/documents?pageSize=200');
