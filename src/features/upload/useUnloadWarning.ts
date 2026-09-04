@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { holdUnload } from '@/lib/unload/unloadHold';
 
 /**
  * Asks before the tab is closed or reloaded while `active`.
@@ -10,17 +11,5 @@ import { useEffect } from 'react';
  * thing that can still be said.
  */
 export function useUnloadWarning(active: boolean): void {
-  useEffect(() => {
-    if (!active) return;
-
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      // Older engines show the dialog only for a non-empty value. The text is
-      // not displayed anywhere; browsers show their own wording.
-      event.returnValue = 'Uploads are still running.';
-    };
-
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [active]);
+  useEffect(() => (active ? holdUnload() : undefined), [active]);
 }

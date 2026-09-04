@@ -1,3 +1,5 @@
+import { installUnloadHold } from '@/lib/unload/unloadHold';
+
 let started: Promise<void> | null = null;
 
 /**
@@ -19,6 +21,12 @@ export function startMockApi(): Promise<void> {
       import('./handlers'),
       import('./api-contract'),
     ]);
+
+    // Listens before the worker does. It reports this page closed on
+    // `beforeunload`, and a hold on leaving — the operator may yet stay — has
+    // to be heard ahead of that report, which the browser decides by order of
+    // registration alone. See `lib/unload/unloadHold.ts`.
+    installUnloadHold();
 
     await setupWorker(...handlers).start({
       /**
