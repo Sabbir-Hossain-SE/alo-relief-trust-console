@@ -120,6 +120,11 @@ function averageConfidence(status: ProcessingStatus, fieldConfidence: number[]):
  * the same pair always yields the same result, which is what lets the archive be
  * addressed rather than stored.
  */
+// Filled afresh per document and read before the next; two hundred thousand
+// short-lived arrays at boot were a measurable share of building the archive.
+const missingRolls: number[] = new Array(FIELD_COUNT).fill(0);
+const confidenceRolls: number[] = new Array(FIELD_COUNT).fill(0);
+
 export function generateCore(seed: number, index: number): DocumentCore {
   const random = createRandom(seedAt(seed, index));
 
@@ -136,8 +141,8 @@ export function generateCore(seed: number, index: number): DocumentCore {
   const errorRoll = random();
   const attemptRoll = random();
 
-  const missingRolls = Array.from({ length: FIELD_COUNT }, () => random());
-  const confidenceRolls = Array.from({ length: FIELD_COUNT }, () => random());
+  for (let i = 0; i < FIELD_COUNT; i += 1) missingRolls[i] = random();
+  for (let i = 0; i < FIELD_COUNT; i += 1) confidenceRolls[i] = random();
 
   const status = statusFromRoll(statusRoll);
   const { missingMask, fieldConfidence } = deriveFields(status, missingRolls, confidenceRolls);

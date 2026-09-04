@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { appendDocuments, assertInRange, buildColumnStore, storeBytes } from './columnStore';
+import {
+  appendDocuments,
+  assertInRange,
+  buildColumnStore,
+  buildColumnStoreInSlices,
+  storeBytes,
+} from './columnStore';
 import { generateCore } from './generate';
 
 const SEED = 20260901;
@@ -75,6 +81,19 @@ describe('buildColumnStore', () => {
       expect(store.missingMask[index]).toBe(core.missingMask);
       expect(store.docTypeId[index]).toBe(core.docTypeId);
     }
+  });
+});
+
+describe('buildColumnStoreInSlices', () => {
+  it('builds the same archive as the one-pass build', async () => {
+    const sliced = await buildColumnStoreInSlices(SEED, 25_000, 100);
+    const whole = buildColumnStore(SEED, 25_000, 100);
+
+    expect(sliced.size).toBe(whole.size);
+    expect(sliced.capacity).toBe(whole.capacity);
+    expect(Array.from(sliced.statusId)).toEqual(Array.from(whole.statusId));
+    expect(Array.from(sliced.uploadedAt)).toEqual(Array.from(whole.uploadedAt));
+    expect(Array.from(sliced.uploadedDesc)).toEqual(Array.from(whole.uploadedDesc));
   });
 });
 

@@ -1,7 +1,12 @@
 import { correctField, type ExtractedField } from '@/domain/field';
 import { isRetryable } from '@/domain/errors';
 import type { Correction, NormalizedRecord } from '@/domain/document';
-import { appendDocuments, buildColumnStore, type ColumnStore } from './corpus/columnStore';
+import {
+  appendDocuments,
+  buildColumnStore,
+  buildColumnStoreInSlices,
+  type ColumnStore,
+} from './corpus/columnStore';
 import { DEFAULT_ARCHIVE_SIZE, DEFAULT_SEED } from './corpus/config';
 import { detailAt, errorCodeAt, statusAt } from './corpus/documentAt';
 import { applyPatch, createOverlay, readPatch, type Overlay } from './corpus/overlay';
@@ -34,10 +39,10 @@ export type DatabaseOptions = {
   latency?: Latency;
 };
 
-function build({ size = DEFAULT_ARCHIVE_SIZE, config, latency }: DatabaseOptions): Database {
+function around(store: ColumnStore, { config, latency }: DatabaseOptions): Database {
   return {
-    store: buildColumnStore(DEFAULT_SEED, size, UPLOAD_HEADROOM),
-    overlay: createOverlay(size + UPLOAD_HEADROOM),
+    store,
+    overlay: createOverlay(store.capacity),
     batches: new Map(),
     config: { ...DEFAULT_SIMULATOR_CONFIG, ...config },
     latency: latency ?? DEMO_LATENCY,
@@ -47,9 +52,36 @@ function build({ size = DEFAULT_ARCHIVE_SIZE, config, latency }: DatabaseOptions
   };
 }
 
-let database: Database | null = null;
+function build(options: DatabaseOptions): Database {
+  const { size = DEFAULT_ARCHIVE_SIZE } = options;
+  return around(buildColumnStore(DEFAULT_SEED, size, UPLOAD_HEADROOM), options);
+}
 
-// Builds the archive once per process.
+let database: Database | null = null;
+let preparing: Promise<Database> | null = null;
+
+/**
+ * Builds the archive ahead of the first request, with a breath between slices.
+ *
+ * Built lazily inside the first handler, the archive landed as one long task
+ * right after the loading gate had cleared — on top of the grid's first mount.
+ * The boot awaits this beside the worker's own start instead.
+ */
+export function prepareDatabase(): Promise<Database> {
+  if (database !== null) return Promise.resolve(database);
+
+  preparing ??= buildColumnStoreInSlices(DEFAULT_SEED, DEFAULT_ARCHIVE_SIZE, UPLOAD_HEADROOM).then(
+    (store) => {
+      database ??= around(store, {});
+      preparing = null;
+      return database;
+    },
+  );
+
+  return preparing;
+}
+
+// The archive, built on the spot if nothing prepared it.
 export function getDatabase(): Database {
   database ??= build({});
   return database;

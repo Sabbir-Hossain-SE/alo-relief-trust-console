@@ -16,10 +16,11 @@ let started: Promise<void> | null = null;
  */
 export function startMockApi(): Promise<void> {
   started ??= (async () => {
-    const [{ setupWorker }, { handlers }, { API_BASE }] = await Promise.all([
+    const [{ setupWorker }, { handlers }, { API_BASE }, { prepareDatabase }] = await Promise.all([
       import('msw/browser'),
       import('./handlers'),
       import('./api-contract'),
+      import('./db'),
     ]);
 
     // Listens before the worker does. It reports this page closed on
@@ -28,7 +29,10 @@ export function startMockApi(): Promise<void> {
     // registration alone. See `lib/unload/unloadHold.ts`.
     installUnloadHold();
 
-    await setupWorker(...handlers).start({
+    // The archive is built while the worker registers, in slices that let the
+    // spinner keep moving, so the first request finds it ready rather than
+    // paying for it after the page is up.
+    const started = setupWorker(...handlers).start({
       /**
        * The worker sees every request the page makes, not only ours: Next.js
        * fetches RSC payloads on each client-side navigation and prefetch, plus
@@ -42,6 +46,8 @@ export function startMockApi(): Promise<void> {
       serviceWorker: { url: '/mockServiceWorker.js' },
       quiet: true,
     });
+
+    await Promise.all([started, prepareDatabase()]);
   })();
 
   return started;
