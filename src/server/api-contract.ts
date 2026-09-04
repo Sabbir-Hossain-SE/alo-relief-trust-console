@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import { DOCUMENT_TYPES, NORMALIZED_FIELD_KEYS } from '@/domain/document';
+import { CONFIDENCE_BANDS } from '@/domain/confidence';
+import { DOCUMENT_TYPES } from '@/domain/document';
 import { PROCESSING_ERROR_CODES } from '@/domain/errors';
 import { PROCESSING_STATUSES } from '@/domain/status';
-import { documentDateMessage } from '@/lib/date/isoDate';
-import { phoneProblem } from '@/lib/phone/phone';
-import { SORT_FIELDS } from './corpus/query';
+import { SORT_FIELDS } from '@/domain/sort';
 
 /**
  * The wire contract, shared by the handlers and the client so the two cannot
@@ -29,7 +28,7 @@ export function apiUrl(path = ''): string {
 
 const statusSchema = z.enum(PROCESSING_STATUSES);
 const documentTypeSchema = z.enum(DOCUMENT_TYPES);
-const confidenceBandSchema = z.enum(['high', 'medium', 'low']);
+const confidenceBandSchema = z.enum(CONFIDENCE_BANDS);
 const errorCodeSchema = z.enum(PROCESSING_ERROR_CODES);
 
 export const documentQuerySchema = z.object({
@@ -67,44 +66,11 @@ export const uploadFileSchema = z.object({
 export type UploadFileInput = z.infer<typeof uploadFileSchema>;
 
 /**
- * A correction has to satisfy the same rules the form applies.
- *
- * The form is where an operator meets them, but a backend that accepts whatever
- * reaches it is not validating — it is trusting the client, and the archive
- * ends up holding numbers no network routes and days that never happened. Both
- * ends read the rule from `lib/`, so they cannot disagree.
+ * The correction schemas live in their own module: they carry the phone
+ * validator and its numbering plans, which only the handlers and the correction
+ * form need, and importing them here put that on every route.
  */
-const FIELD_RULES: Partial<
-  Record<(typeof NORMALIZED_FIELD_KEYS)[number], (value: string) => string | null>
-> = {
-  phone: phoneProblem,
-  documentDate: (value) => documentDateMessage(value),
-};
-
-export const correctionSchema = z
-  .object({
-    field: z.enum(NORMALIZED_FIELD_KEYS),
-    value: z.string().trim().max(200),
-  })
-  .superRefine(({ field, value }, ctx) => {
-    const problem = FIELD_RULES[field]?.(value) ?? null;
-    if (problem !== null) ctx.addIssue({ code: 'custom', path: ['value'], message: problem });
-  });
-
-export type CorrectionInput = z.infer<typeof correctionSchema>;
-
-/**
- * A whole pass over a record, not one field at a time.
- *
- * An operator working through a review task usually fixes several fields at
- * once. Sending them separately would mean a request and a refetch per field,
- * and an audit trail that reads as several visits rather than one.
- */
-export const correctionsSchema = z.object({
-  corrections: z.array(correctionSchema).min(1).max(NORMALIZED_FIELD_KEYS.length),
-});
-
-export type CorrectionsInput = z.infer<typeof correctionsSchema>;
+export type { CorrectionInput, CorrectionsInput } from './correction-contract';
 
 export const retryBatchSchema = z.object({
   /** Restricts the retry to these documents; omitted means every retryable failure. */

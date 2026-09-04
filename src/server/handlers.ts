@@ -2,7 +2,6 @@ import { HttpResponse, delay, http } from 'msw';
 import { describeError } from '@/domain/errors';
 import {
   API_BASE,
-  correctionsSchema,
   createBatchSchema,
   uploadFileSchema,
   fromSearchParams,
@@ -13,6 +12,7 @@ import {
   type ManualEntryResult,
   type RetryResult,
 } from './api-contract';
+import { correctionsSchema } from './correction-contract';
 import { analyzeArchive } from './corpus/analytics';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
 import { documentsToCsv, exportFileName } from './corpus/exportCsv';

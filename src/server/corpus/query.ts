@@ -6,19 +6,10 @@ import { PROCESSING_STATUSES, isExtracted, type ProcessingStatus } from '@/domai
 import type { ColumnStore } from './columnStore';
 import { errorFromId, summaryAt } from './documentAt';
 import type { Overlay } from './overlay';
+import { SORT_FIELDS, type SortDirection, type SortField } from '@/domain/sort';
 import { isSearchable, resolveSearch } from './searchIndex';
 
-export const SORT_FIELDS = [
-  'uploadedAt',
-  'confidence',
-  'personName',
-  'status',
-  'documentType',
-  'index',
-] as const;
-
-export type SortField = (typeof SORT_FIELDS)[number];
-export type SortDirection = 'asc' | 'desc';
+export { SORT_FIELDS, type SortDirection, type SortField };
 
 export type DocumentQuery = {
   status?: readonly ProcessingStatus[];
