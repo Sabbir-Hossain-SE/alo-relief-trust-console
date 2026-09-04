@@ -1,6 +1,7 @@
 'use client';
 
 import Box from '@mui/material/Box';
+import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { DensityToggle } from './components/DensityToggle';
@@ -34,7 +35,16 @@ export function DocumentsView() {
       <Box className={SECTION_CONTENT_GAP}>
         <DocumentFilters query={query} isFiltered={isFiltered} onChange={update} onClear={clear} />
         <ExportProgress state={state} />
-        <DocumentsGrid onOpen={(row) => select(row.id)} />
+
+        {/* The grid is inside its own boundary and the filters are outside it.
+            React unmounts everything under the nearest boundary, so without
+            this a grid that throws takes with it the very controls the operator
+            would use to undo whatever caused it. Keyed on the query, so
+            changing a filter clears the failure rather than leaving the notice
+            in place until a reload. */}
+        <ErrorBoundary title="The documents could not be listed" resetKey={JSON.stringify(query)}>
+          <DocumentsGrid onOpen={(row) => select(row.id)} />
+        </ErrorBoundary>
       </Box>
 
       <DocumentDrawer documentId={selectedId} onClose={() => select(null)} />

@@ -1,16 +1,8 @@
 import { z } from 'zod';
 import { NORMALIZED_FIELD_KEYS, type NormalizedRecord } from '@/domain/document';
+import { documentDateProblem, DATE_PROBLEM_MESSAGES } from '@/lib/date/isoDate';
+import { phoneProblem } from '@/lib/phone/phone';
 import type { CorrectionInput } from '@/server/api-contract';
-
-/** Loose on purpose: an archive holds numbers written in a dozen local styles. */
-const PHONE = /^\+?[\d\s()-]{6,24}$/;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-// Reports whether a date string names a day that actually exists.
-function isRealDate(value: string): boolean {
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
 
 /**
  * What an operator is allowed to type.
@@ -19,6 +11,11 @@ function isRealDate(value: string): boolean {
  * it is a fact about the document, and a form that refuses to save without one
  * would push an operator into inventing data — the opposite of what a review
  * queue is for.
+ *
+ * The phone and date rules live in `lib/` rather than here because the fields
+ * that edit them enforce the same rules while they are being typed, and the
+ * mock backend rejects a value that breaks them. Three copies of a rule is
+ * three places for it to drift.
  */
 export const correctionFormSchema = z.object({
   personName: z.string().trim().max(200),
@@ -26,19 +23,22 @@ export const correctionFormSchema = z.object({
     .string()
     .trim()
     .max(200)
-    .refine((value) => value === '' || PHONE.test(value), 'Use digits, spaces and + ( ) - only'),
+    .superRefine((value, ctx) => {
+      const problem = phoneProblem(value);
+      if (problem !== null) ctx.addIssue({ code: 'custom', message: problem });
+    }),
   location: z.string().trim().max(200),
   programName: z.string().trim().max(200),
   documentDate: z
     .string()
     .trim()
     .max(200)
-    .refine((value) => value === '' || ISO_DATE.test(value), 'Use the form 2024-03-18')
-    .refine((value) => value === '' || isRealDate(value), 'That day does not exist')
-    .refine(
-      (value) => value === '' || new Date(`${value}T00:00:00Z`).getTime() <= Date.now(),
-      'A document cannot be dated in the future',
-    ),
+    .superRefine((value, ctx) => {
+      const problem = documentDateProblem(value);
+      if (problem !== null) {
+        ctx.addIssue({ code: 'custom', message: DATE_PROBLEM_MESSAGES[problem] });
+      }
+    }),
 });
 
 export type CorrectionFormValues = z.infer<typeof correctionFormSchema>;

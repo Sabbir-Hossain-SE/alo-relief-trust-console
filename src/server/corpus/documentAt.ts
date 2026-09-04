@@ -45,9 +45,20 @@ function documentDate(uploadedAt: number): string {
   return new Date(uploadedAt - 86_400_000).toISOString().slice(0, 10);
 }
 
+/**
+ * A Bangladeshi mobile number, in the shape the numbering plan actually issues.
+ *
+ * The operator prefix is part of that shape: 01[3-9] is what the regulator has
+ * allocated, so `+8801` followed by any eight digits is a number no network
+ * would route. It went unnoticed while nothing checked, and every record in the
+ * archive would now fail the correction form's validator.
+ */
+const OPERATOR_PREFIXES = 7;
+
 function phoneFor(nameId: number, locationId: number): string {
+  const operator = 3 + ((nameId + locationId) % OPERATOR_PREFIXES);
   const body = String((nameId * 7919 + locationId * 104729) % 100_000_000).padStart(8, '0');
-  return `+8801${body}`;
+  return `+8801${operator}${body}`;
 }
 
 /**

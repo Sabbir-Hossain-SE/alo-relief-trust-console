@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithTheme } from '@/test/render';
 import { expectNoViolations } from '@/test/axe';
@@ -36,7 +36,12 @@ describe('CorrectionForm', () => {
   it('opens with the extracted values already in the inputs', () => {
     setup();
     expect(screen.getByLabelText('Person name')).toHaveValue('Nasrin Ali');
-    expect(screen.getByLabelText('Phone')).toHaveValue('+8801711111111');
+
+    // The phone is stored as one E.164 string and edited as its two real
+    // parts, so the number field holds the national digits and the country
+    // is a selection rather than a prefix the operator has to retype.
+    expect(screen.getByLabelText('Phone')).toHaveValue('1711111111');
+    expect(screen.getByLabelText('Phone country')).toHaveTextContent('BD +880');
   });
 
   it('cannot be saved until something changes', async () => {
@@ -66,13 +71,13 @@ describe('CorrectionForm', () => {
     const phone = screen.getByLabelText('Phone');
 
     await user.clear(phone);
-    await user.type(phone, 'call the office');
+    await user.type(phone, '1712345');
     await user.tab();
 
     // Announced with the field, not floating beside it: MUI wires helperText
     // through aria-describedby and `error` through aria-invalid.
     await waitFor(() => expect(phone).toHaveAttribute('aria-invalid', 'true'));
-    expect(phone).toHaveAccessibleDescription(/digits, spaces/i);
+    expect(phone).toHaveAccessibleDescription(/not a valid bangladesh number/i);
 
     await user.click(screen.getByRole('button', { name: 'Save corrections' }));
     expect(onSave).not.toHaveBeenCalled();
@@ -134,9 +139,21 @@ describe('CorrectionForm', () => {
     await user.tab();
     expect(screen.getByLabelText('Person name')).toHaveFocus();
 
-    for (const label of ['Phone', 'Location', 'Program', 'Document date']) {
+    for (const label of ['Phone country', 'Phone', 'Location', 'Program']) {
       await user.tab();
       expect(screen.getByLabelText(label)).toHaveFocus();
     }
+
+    // The picker is a group of sections rather than one input, so a tab stops
+    // on the first section and the arrow keys move between them.
+    await user.tab();
+    const date = screen.getByRole('group', { name: 'Document date' });
+    expect(within(date).getByRole('spinbutton', { name: 'Year' })).toHaveFocus();
+
+    await user.keyboard('{ArrowRight}');
+    expect(within(date).getByRole('spinbutton', { name: 'Month' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Choose document date' })).toHaveFocus();
   });
 });

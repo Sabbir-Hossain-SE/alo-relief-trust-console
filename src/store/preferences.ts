@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { z } from 'zod';
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/domain/pagination';
 
 /**
  * Operator preferences, and only those.
@@ -11,7 +12,7 @@ import { z } from 'zod';
  */
 const preferencesSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
-  pageSize: z.union([z.literal(25), z.literal(50), z.literal(100)]),
+  pageSize: z.literal(PAGE_SIZE_OPTIONS),
   /**
    * Whether the navigation is reduced to an icon rail.
    *
@@ -28,7 +29,7 @@ export type GridDensity = Preferences['density'];
 
 export const DEFAULT_PREFERENCES: Preferences = {
   density: 'comfortable',
-  pageSize: 50,
+  pageSize: DEFAULT_PAGE_SIZE,
   navCollapsed: false,
 };
 

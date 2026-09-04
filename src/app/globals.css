@@ -54,12 +54,39 @@ body {
     font-variant-numeric: tabular-nums;
   }
 
-  /* MUI styles focus on some components and clears it on others. This makes the
-     ring unconditional, so nothing is reachable without being visible. */
+  /*
+   * MUI styles focus on some components and clears it on others, so the ring is
+   * declared once here and unconditionally: nothing is reachable without being
+   * visible.
+   *
+   * It sets the outline and nothing else. It used to set `border-radius` as
+   * well, to round the ring — but `border-radius` reshapes the element, not the
+   * outline drawn around it, so every control whose resting shape was not 6px
+   * changed shape the moment it was focused: the circular icon buttons in the
+   * bar squared off, the pill nav items went rectangular, and the two halves of
+   * the density toggle lost the rounded ends that read as one group. An outline
+   * already follows the element's own radius, so there was nothing to set.
+   */
   :focus-visible {
     outline: 2px solid var(--mui-palette-primary-main);
     outline-offset: 2px;
-    border-radius: 6px;
+  }
+
+  /*
+   * Text fields are the one place the rule above must not reach.
+   *
+   * An outlined field already draws a focus ring of its own, and it draws it
+   * around the whole control — the leading icon and the clear button included.
+   * The rule above draws on the `input`, which is only the text between them.
+   * So the search field came out with two rings of two different shapes, one
+   * inside the other. The control's own ring is the correct one.
+   *
+   * Scoped to the outlined variant deliberately. The grid's rows-per-page select
+   * is a standard one with no ring of its own, and suppressing this there would
+   * leave a focus stop with nothing to see.
+   */
+  .MuiOutlinedInput-input:focus-visible {
+    outline: none;
   }
 
   /* The iteration count is the load-bearing line. Collapsing the duration of an

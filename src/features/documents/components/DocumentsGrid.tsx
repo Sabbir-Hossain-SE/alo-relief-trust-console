@@ -7,13 +7,12 @@ import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import type { DocumentSummary } from '@/domain/document';
-import { DEFAULT_PAGE_SIZE, type SortField } from '@/server/corpus/query';
+import { PAGE_SIZE_OPTIONS, gridPageSize } from '@/domain/pagination';
+import { type SortField } from '@/server/corpus/query';
 import { useDocuments } from '@/store/polling';
 import { usePreferences } from '@/store/usePreferences';
 import { useDocumentQuery } from '../useDocumentQuery';
 import { documentColumns } from './columns';
-
-const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 /**
  * Row heights owned here rather than inherited from MUI's density.
@@ -57,7 +56,11 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
   const { query, goToPage, update, isFiltered, clear } = useDocumentQuery();
   const { density, pageSize: preferredPageSize } = usePreferences();
 
-  const pageSize = query.pageSize ?? preferredPageSize ?? DEFAULT_PAGE_SIZE;
+  // Resolved rather than taken as given. `pageSize` arrives from the URL, which
+  // anyone can edit, and MUI throws rather than clamps when it is handed a page
+  // larger than its licence allows — so ?pageSize=200 took the whole route down
+  // and left the operator on the browser's own error page.
+  const pageSize = gridPageSize(query.pageSize ?? preferredPageSize);
   const { data, isFetching, isError, refetch } = useDocuments({ ...query, pageSize });
 
   const paginationModel = useMemo<GridPaginationModel>(
