@@ -26,7 +26,10 @@ const MALFORMED = [
   '?type=bogus',
   '?confidence=bogus',
   '?sort=bogus&dir=sideways',
+  '?sort=bogus&dir=asc',
   '?cause=bogus',
+  '?doc=',
+  '?doc=%20',
 ];
 
 for (const query of MALFORMED) {
@@ -77,8 +80,29 @@ test('explains a deep link to a document that is not in the archive', async ({ p
 
   const detail = page.getByRole('dialog', { name: 'Document detail' });
   await expect(detail).toBeVisible();
-  await expect(detail.getByText('This document could not be loaded')).toBeVisible();
-  await expect(detail.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expect(detail.getByText('This document is not in the archive')).toBeVisible();
+  // A record that is not there is not helped by asking again, and the answer
+  // is final: no retry, and no skeleton left waiting for details that will
+  // never come.
+  await expect(detail.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+  await expect(detail.locator('.MuiSkeleton-root')).toHaveCount(0);
+});
+
+/**
+ * The ID column is not a sort the query engine performs. Offered anyway, the
+ * click wrote a sort the server dropped and the header arrows described an
+ * order the rows were not in.
+ */
+test('does not offer a sort the archive cannot perform', async ({ page }) => {
+  await open(page, '/documents');
+
+  await page.getByRole('columnheader', { name: 'ID', exact: true }).click();
+
+  await expect(page).not.toHaveURL(/sort=/);
+  await expect(page.getByRole('columnheader', { name: 'Uploaded' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  );
 });
 
 /** The same for a batch, which is a whole route rather than a panel. */

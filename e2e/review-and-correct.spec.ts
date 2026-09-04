@@ -42,6 +42,33 @@ test('works a record out of the review queue by correcting it', async ({ page })
   assertQuiet();
 });
 
+/**
+ * The drawer never unmounts, so what was done to the last record was still
+ * being reported under the next one opened.
+ */
+test('reports what was done to this record, not to the last one', async ({ page }) => {
+  await open(page, '/review');
+
+  const tasks = page
+    .getByRole('list', { name: 'Review queue' })
+    .getByRole('button', { name: /^Review / });
+  await tasks.first().click();
+
+  const detail = page.getByRole('dialog', { name: 'Document detail' });
+  await detail
+    .getByRole('button', { name: /^(These values are correct|Nothing more on the page)$/ })
+    .click();
+  await expect(detail.getByRole('status')).toHaveText('Correction saved.', { timeout: 15_000 });
+
+  await page.keyboard.press('Escape');
+  await expect(detail).toBeHidden();
+
+  await tasks.first().click();
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole('textbox', { name: 'Person name' })).toBeVisible();
+  await expect(detail.getByText('Correction saved.')).toHaveCount(0);
+});
+
 test('confirms an uncertain record rather than changing it', async ({ page }) => {
   await open(page, '/review');
 
