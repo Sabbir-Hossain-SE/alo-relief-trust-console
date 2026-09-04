@@ -59,3 +59,28 @@ export type QueueOptions<T extends QueueItem> = {
   /** Injectable so tests do not wait out real backoff. */
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
+
+/**
+ * Thrown by a task to say that another attempt cannot help.
+ *
+ * A server that has refused a file outright — too long a name, a shape it does
+ * not accept — will refuse it identically every time, and retrying it with
+ * backoff spends seconds per file learning nothing.
+ */
+export class PermanentFailure extends Error {
+  readonly permanent = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentFailure';
+  }
+}
+
+// Recognised by shape rather than by class, so a copy from another bundle still counts.
+export function isPermanentFailure(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { permanent?: unknown }).permanent === true
+  );
+}

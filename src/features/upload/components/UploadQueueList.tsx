@@ -61,12 +61,26 @@ function TaskRow({ task }: { task: QueueTask }) {
 
 type UploadQueueListProps = {
   snapshot: QueueSnapshot;
+  /** The browser reports no connection, which is why the queue is paused. */
+  offline?: boolean;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
 };
 
-export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: UploadQueueListProps) {
+// Says why nothing is moving, since a pause the operator did not ask for needs explaining.
+function pausedLabel(snapshot: QueueSnapshot, offline: boolean): string {
+  if (!snapshot.paused) return '';
+  return offline ? ' · paused until the connection comes back' : ' · paused';
+}
+
+export function UploadQueueList({
+  snapshot,
+  offline = false,
+  onPause,
+  onResume,
+  onCancel,
+}: UploadQueueListProps) {
   const finished = snapshot.succeeded + snapshot.failed + snapshot.cancelled;
 
   return (
@@ -79,7 +93,7 @@ export function UploadQueueList({ snapshot, onPause, onResume, onCancel }: Uploa
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {formatCount(snapshot.running)} in flight · {formatCount(snapshot.failed)} failed
-            {snapshot.paused ? ' · paused' : ''}
+            {pausedLabel(snapshot, offline)}
           </Typography>
         </Box>
 

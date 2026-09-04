@@ -1,4 +1,11 @@
-import type { QueueItem, QueueOptions, QueueSnapshot, QueueTask, TaskStatus } from './types';
+import {
+  isPermanentFailure,
+  type QueueItem,
+  type QueueOptions,
+  type QueueSnapshot,
+  type QueueTask,
+  type TaskStatus,
+} from './types';
 
 const DEFAULTS = {
   concurrency: 6,
@@ -159,7 +166,7 @@ export function createUploadQueue<T extends QueueItem>(
 
         const message = error instanceof Error ? error.message : 'Upload failed';
 
-        if (tryNumber >= maxAttempts) {
+        if (isPermanentFailure(error) || tryNumber >= maxAttempts) {
           update(item.id, { status: 'failed', error: message });
           return;
         }
