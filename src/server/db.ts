@@ -37,7 +37,7 @@ export type DatabaseOptions = {
 function build({ size = DEFAULT_ARCHIVE_SIZE, config, latency }: DatabaseOptions): Database {
   return {
     store: buildColumnStore(DEFAULT_SEED, size, UPLOAD_HEADROOM),
-    overlay: createOverlay(),
+    overlay: createOverlay(size + UPLOAD_HEADROOM),
     batches: new Map(),
     config: { ...DEFAULT_SIMULATOR_CONFIG, ...config },
     latency: latency ?? DEMO_LATENCY,

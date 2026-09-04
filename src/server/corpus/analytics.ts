@@ -1,4 +1,9 @@
-import { confidenceBand, type ConfidenceBand } from '@/domain/confidence';
+import {
+  CONFIDENCE_BANDS,
+  HIGH_CONFIDENCE,
+  MEDIUM_CONFIDENCE,
+  type ConfidenceBand,
+} from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentType } from '@/domain/document';
 import { PROCESSING_ERROR_CODES, type ProcessingErrorCode } from '@/domain/errors';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
@@ -11,7 +16,6 @@ import type { Overlay } from './overlay';
  * a confidence that means anything. A pending or failed document is stored as
  * 0, which is honest for sorting and a lie in an average.
  */
-const EXTRACTED: readonly ProcessingStatus[] = ['completed', 'needs_review'];
 
 export type ArchiveAnalytics = {
   total: number;
@@ -44,15 +48,15 @@ export function analyzeArchive(store: ColumnStore, overlay: Overlay): ArchiveAna
   const byStatus = zeroed(PROCESSING_STATUSES);
   const byType = zeroed(DOCUMENT_TYPES);
   const byCause = zeroed(PROCESSING_ERROR_CODES);
-  const byConfidence = zeroed(['high', 'medium', 'low'] as const);
+  const byConfidence = zeroed(CONFIDENCE_BANDS);
 
-  const hasOverlay = overlay.size > 0;
+  const { patches, touched } = overlay;
   let extracted = 0;
   let confidenceTotal = 0;
   let needsAttention = 0;
 
   for (let index = 0; index < store.size; index += 1) {
-    const patch = hasOverlay ? overlay.get(index) : undefined;
+    const patch = touched[index] === 1 ? patches.get(index) : undefined;
 
     const status =
       patch?.status ?? (PROCESSING_STATUSES[store.statusId[index] as number] as ProcessingStatus);
@@ -74,12 +78,16 @@ export function analyzeArchive(store: ColumnStore, overlay: Overlay): ArchiveAna
       if (cause !== undefined) byCause[cause] += 1;
     }
 
-    if (EXTRACTED.includes(status)) {
+    if (status === 'completed' || status === 'needs_review') {
       const confidence = store.confidence[index] as number;
 
       extracted += 1;
       confidenceTotal += confidence;
-      byConfidence[confidenceBand(confidence)] += 1;
+      // Compared against the thresholds rather than named per row, the same
+      // way the filter reads a band.
+      if (confidence >= HIGH_CONFIDENCE) byConfidence.high += 1;
+      else if (confidence >= MEDIUM_CONFIDENCE) byConfidence.medium += 1;
+      else byConfidence.low += 1;
     }
   }
 

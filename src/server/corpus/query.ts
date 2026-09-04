@@ -126,11 +126,11 @@ function collect(
   const bands = bandMask(query.confidence);
   const search = isSearchable(query.search) ? resolveSearch(query.search) : null;
   const causes = query.errorCode && query.errorCode.length > 0 ? new Set(query.errorCode) : null;
-  const hasOverlay = overlay.size > 0;
+  const { patches, touched } = overlay;
 
   // Only uploaded documents carry a batch id, so a batch filter can never match
   // anything in the generated archive.
-  if (query.batchId !== undefined && !hasOverlay) return new Uint32Array(0);
+  if (query.batchId !== undefined && patches.size === 0) return new Uint32Array(0);
   if (search !== null && matchesNothing(search)) return new Uint32Array(0);
 
   const matchNames = search !== null && search.nameIds.size > 0;
@@ -141,7 +141,7 @@ function collect(
 
   for (let position = 0; position < total; position += 1) {
     const index = order === null ? position : (order[position] as number);
-    const patch = hasOverlay ? overlay.get(index) : undefined;
+    const patch = touched[index] === 1 ? patches.get(index) : undefined;
     const statusId = patch?.status ? STATUS_ID[patch.status] : (store.statusId[index] as number);
 
     if (query.batchId !== undefined && patch?.batchId !== query.batchId) continue;
@@ -288,10 +288,10 @@ export function countByStatus(
     ProcessingStatus,
     number
   >;
-  const hasOverlay = overlay.size > 0;
+  const { patches, touched } = overlay;
 
   for (let index = 0; index < store.size; index += 1) {
-    const patch = hasOverlay ? overlay.get(index) : undefined;
+    const patch = touched[index] === 1 ? patches.get(index) : undefined;
     const status =
       patch?.status ?? (PROCESSING_STATUSES[store.statusId[index] as number] as ProcessingStatus);
 
