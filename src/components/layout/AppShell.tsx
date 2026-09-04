@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { navCollapsed } = usePreferences();
   const dispatch = useAppDispatch();
   const theme = useTheme();
-  const railShown = useMediaQuery(theme.breakpoints.up('md'));
+  const railShown = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
   const [railWasShown, setRailWasShown] = useState(railShown);
 
   useWindowDropGuard();
