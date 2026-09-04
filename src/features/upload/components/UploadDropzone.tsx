@@ -9,6 +9,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import { ACCEPT_ATTRIBUTE } from '@/lib/file-ingest/validate';
 import type { FsEntry } from '@/lib/file-ingest/types';
 import { entriesFromDataTransfer } from '@/lib/file-ingest/walk';
+import { useUploadAffordances } from '../useUploadAffordances';
 import { UploadPanel } from './UploadPanel';
 
 type UploadDropzoneProps = {
@@ -28,6 +29,7 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
   const [isOver, setIsOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const { canDrop, canPickFolder } = useUploadAffordances();
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -77,12 +79,16 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
     >
       <CloudUploadOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled' }} />
 
+      {/* A phone has no window to drag a file out of, so the panel does not
+          ask for one; it says what the device can do. */}
       <Box>
         <Typography variant="h3" component="p">
-          Drop documents or a folder here
+          {canDrop ? 'Drop documents or a folder here' : 'Choose documents to upload'}
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-          A whole archive folder is fine — it is indexed without freezing the page.
+          {canDrop
+            ? 'A whole archive folder is fine — it is indexed without freezing the page.'
+            : 'As many as you like — they are indexed here before anything is sent.'}
         </Typography>
       </Box>
 
@@ -96,14 +102,16 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
           Choose files
         </Button>
 
-        <Button
-          variant="outlined"
-          disabled={disabled}
-          onClick={() => folderInput.current?.click()}
-          startIcon={<FolderOpenIcon />}
-        >
-          Choose a folder
-        </Button>
+        {canPickFolder ? (
+          <Button
+            variant="outlined"
+            disabled={disabled}
+            onClick={() => folderInput.current?.click()}
+            startIcon={<FolderOpenIcon />}
+          >
+            Choose a folder
+          </Button>
+        ) : null}
       </Box>
 
       <input
@@ -118,18 +126,20 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
         }}
       />
 
-      <input
-        ref={folderInput}
-        type="file"
-        multiple
-        hidden
-        // Not in the React types, but supported everywhere this app runs.
-        {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
-        onChange={(event) => {
-          onFiles(Array.from(event.target.files ?? []));
-          event.target.value = '';
-        }}
-      />
+      {canPickFolder ? (
+        <input
+          ref={folderInput}
+          type="file"
+          multiple
+          hidden
+          // Not in the React types, but honoured wherever the button is shown.
+          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+          onChange={(event) => {
+            onFiles(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
+      ) : null}
     </UploadPanel>
   );
 }

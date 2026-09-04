@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithTheme } from '@/test/render';
 import { UploadDropzone } from './UploadDropzone';
@@ -22,6 +22,40 @@ function setup() {
 
   return { onFiles, onEntries };
 }
+
+// jsdom has no matchMedia; this one answers as a phone or a desktop would.
+function pretendPointer(touchOnly: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: touchOnly && query.includes('pointer: coarse'),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+  }));
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('UploadDropzone on a phone', () => {
+  // The picker hands back files however the input is marked, and there is no
+  // window to drag a file out of. The panel says what the device can do.
+  it('offers files, and neither a folder nor a drop', () => {
+    pretendPointer(true);
+    setup();
+
+    expect(screen.getByText('Choose documents to upload')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Choose files' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Choose a folder' })).not.toBeInTheDocument();
+  });
+
+  it('still invites a drop where there is a pointer to drag with', () => {
+    pretendPointer(false);
+    setup();
+
+    expect(screen.getByText('Drop documents or a folder here')).toBeVisible();
+  });
+});
 
 describe('UploadDropzone', () => {
   it('hands dropped files on when the browser offers no entries for them', () => {
