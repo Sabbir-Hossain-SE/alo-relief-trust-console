@@ -29,6 +29,25 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+
+    // Said explicitly: without it Firefox shows a "move" cursor and Safari
+    // sometimes none, and neither tells the operator the drop will be taken.
+    event.dataTransfer.dropEffect = disabled ? 'none' : 'copy';
+    if (!disabled) setIsOver(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    // Fires again every time the pointer crosses into a child — the icon, the
+    // text, a button — so the highlight flickered all the way across the panel.
+    // Only a leave that lands outside the panel itself counts.
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+
+    setIsOver(false);
+  }
+
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsOver(false);
@@ -37,20 +56,23 @@ export function UploadDropzone({ disabled = false, onEntries, onFiles }: UploadD
     // Must be read synchronously: the item list is emptied once the drop
     // handler returns, so deferring this loses the folders.
     const entries = entriesFromDataTransfer(event.dataTransfer);
+    if (entries.length > 0) {
+      onEntries(entries);
+      return;
+    }
 
-    if (entries.length > 0) onEntries(entries);
-    else onFiles(Array.from(event.dataTransfer.files));
+    // Text or a link dragged in from another window is a drop with no files in
+    // it. Indexing it would announce "0 documents ready", so it is ignored.
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) onFiles(files);
   }
 
   return (
     <UploadPanel
       isActive={isOver}
       dimmed={disabled}
-      onDragOver={(event) => {
-        event.preventDefault();
-        if (!disabled) setIsOver(true);
-      }}
-      onDragLeave={() => setIsOver(false)}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <CloudUploadOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled' }} />

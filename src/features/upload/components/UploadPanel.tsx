@@ -1,17 +1,18 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { DragEvent, ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
+import { DROP_TARGET_ATTRIBUTE } from '@/components/layout/useWindowDropGuard';
 
 type UploadPanelProps = {
   children: ReactNode;
   /** Highlights the frame while something is being dragged over it. */
   isActive?: boolean;
   dimmed?: boolean;
-  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
-  onDragLeave?: () => void;
-  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragLeave?: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 };
 
 /**
@@ -36,6 +37,8 @@ export function UploadPanel({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      // Tells the shell's drop guard that this frame handles its own drops.
+      {...(onDrop === undefined ? {} : { [DROP_TARGET_ATTRIBUTE]: '' })}
       className="flex flex-col items-center justify-center gap-3 rounded-xl px-6 py-10 text-center"
       sx={(theme) => ({
         minHeight: 320,

@@ -275,4 +275,14 @@ describe('entriesFromDataTransfer', () => {
   it('handles an empty drop', () => {
     expect(entriesFromDataTransfer(drop([]))).toEqual([]);
   });
+
+  // Browsers without the entry API still fill `files`, which the caller reads
+  // once this returns nothing. Throwing here would lose the drop entirely.
+  it('returns nothing rather than throwing where the entry api is missing', () => {
+    const bare = { kind: 'file' } as unknown as DataTransferItem;
+    expect(entriesFromDataTransfer(drop([bare]))).toEqual([]);
+
+    const noItems = {} as unknown as DataTransfer;
+    expect(entriesFromDataTransfer(noItems)).toEqual([]);
+  });
 });

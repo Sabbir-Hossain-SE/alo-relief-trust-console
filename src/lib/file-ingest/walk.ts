@@ -131,8 +131,10 @@ export async function walkEntries(
 export function entriesFromDataTransfer(dataTransfer: DataTransfer): FsEntry[] {
   const entries: FsEntry[] = [];
 
-  for (const item of Array.from(dataTransfer.items)) {
-    if (item.kind !== 'file') continue;
+  // Both `items` and the entry API are missing from browsers that only ever
+  // offer `files`, and the caller falls back to those when nothing is returned.
+  for (const item of Array.from(dataTransfer.items ?? [])) {
+    if (item.kind !== 'file' || typeof item.webkitGetAsEntry !== 'function') continue;
 
     const entry = item.webkitGetAsEntry() as FsEntry | null;
     if (entry !== null) entries.push(entry);
