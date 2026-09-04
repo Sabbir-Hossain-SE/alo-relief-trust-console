@@ -15,6 +15,22 @@ export type ExportState =
   | { status: 'cancelled' }
   | { status: 'failed'; message: string };
 
+/**
+ * How many bytes the reader will hand back, or null when that cannot be known.
+ *
+ * A compressed response states the size on the wire while the reader yields
+ * the decoded bytes, so the two are not comparable and the bar would fill at a
+ * fifth of the way and sit there. A header that is not a number is treated the
+ * same way, rather than being divided by to produce "NaN%".
+ */
+function bodyLength(headers: Headers): number | null {
+  const encoding = headers.get('content-encoding');
+  if (encoding !== null && encoding !== 'identity') return null;
+
+  const length = Number(headers.get('content-length'));
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
 /** A share of the file, or null when the size is not known yet. */
 export function exportFraction(state: ExportState): number | null {
   if (state.status !== 'running' || state.total === null || state.total === 0) return null;
@@ -46,6 +62,10 @@ export function useCsvExport() {
   }, []);
 
   const start = useCallback(async (query: DocumentQueryInput) => {
+    // One at a time. A second start would replace the controller and leave the
+    // first export running with nothing able to cancel it.
+    if (controller.current !== null) return;
+
     // Paging and page size belong to the grid, not to the file: an export of
     // "the current view" means every row the filter matches, not the fifty
     // that happen to be on screen.
@@ -64,8 +84,7 @@ export function useCsvExport() {
 
       if (!response.ok) throw new Error(`The export failed with ${response.status}.`);
 
-      const header = response.headers.get('content-length');
-      const total = header === null ? null : Number(header);
+      const total = bodyLength(response.headers);
       const rows = Number(response.headers.get('x-total-count') ?? '0');
 
       // The count is in the headers, so an empty result is known before a byte
