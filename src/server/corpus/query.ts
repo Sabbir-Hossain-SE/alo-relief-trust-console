@@ -1,6 +1,7 @@
 import { confidenceBand, type ConfidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPES, type DocumentSummary, type DocumentType } from '@/domain/document';
 import type { ProcessingErrorCode } from '@/domain/errors';
+import { DEFAULT_PAGE_SIZE } from '@/domain/pagination';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import type { ColumnStore } from './columnStore';
 import { errorFromId, summaryAt } from './documentAt';
@@ -44,7 +45,7 @@ export type QueryResult = {
   pageCount: number;
 };
 
-export const DEFAULT_PAGE_SIZE = 50;
+export { DEFAULT_PAGE_SIZE };
 const MAX_PAGE_SIZE = 200;
 
 // Turns the requested statuses into a lookup keyed by the id stored in a column.
