@@ -27,20 +27,36 @@ type DocumentSearchProps = {
  */
 export function DocumentSearch({ value, onChange }: DocumentSearchProps) {
   const [draft, setDraft] = useState(value);
+  /** The last term handed to `onChange`, whether or not the URL shows it yet. */
   const [committed, setCommitted] = useState(value);
+  /** The last URL value seen, so a change from elsewhere can be told apart. */
+  const [seen, setSeen] = useState(value);
 
   // Follow the URL when it changes from elsewhere — a cleared filter, a back
   // navigation. Adjusted during render rather than in an effect, so the field
   // never shows a stale value for a frame.
-  if (value !== committed) {
-    setCommitted(value);
-    setDraft(value);
+  //
+  // Compared against what was committed, not merely against the draft. The URL
+  // arrives a router transition after the commit that asked for it, and a
+  // keystroke typed in that gap used to be thrown away when the older value
+  // landed and was mistaken for someone else's change.
+  if (value !== seen) {
+    setSeen(value);
+
+    if (value !== committed) {
+      setCommitted(value);
+      setDraft(value);
+    }
   }
 
   useEffect(() => {
     if (draft === committed) return;
 
-    const timer = setTimeout(() => onChange(draft), DEBOUNCE_MS);
+    const timer = setTimeout(() => {
+      setCommitted(draft);
+      onChange(draft);
+    }, DEBOUNCE_MS);
+
     return () => clearTimeout(timer);
   }, [draft, committed, onChange]);
 
