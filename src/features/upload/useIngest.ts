@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FsEntry, IngestProgress, IngestResult } from '@/lib/file-ingest/types';
 import { ingestFileList, walkEntries } from '@/lib/file-ingest/walk';
 
@@ -19,6 +19,13 @@ type IngestState =
 export function useIngest() {
   const [state, setState] = useState<IngestState>({ status: 'idle' });
   const controller = useRef<AbortController | null>(null);
+
+  // A walk left running after the page is gone would keep the main thread busy
+  // for a result nothing will read.
+  useEffect(() => {
+    const current = controller;
+    return () => current.current?.abort();
+  }, []);
 
   const run = useCallback(
     async (

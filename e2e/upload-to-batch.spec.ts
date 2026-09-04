@@ -12,6 +12,13 @@ const selection = Array.from({ length: FILE_COUNT }, (_, i) => ({
   buffer: PDF,
 }));
 
+/** Enough files that the queue is still running when the operator changes their mind. */
+const LONG_RUN = Array.from({ length: 120 }, (_, i) => ({
+  name: `scan-${i + 1}.pdf`,
+  mimeType: 'application/pdf',
+  buffer: PDF,
+}));
+
 /** Reads one slice of the four-way split off the card's own accessible name. */
 async function outcomeCount(page: Page, label: string): Promise<number> {
   const card = page.getByRole('link', { name: new RegExp(`${label} — open in documents$`) });
@@ -81,4 +88,51 @@ test('uploads a selection and follows the batch to its outcome', async ({ page }
   await expect(page.getByRole('grid', { name: 'Documents in the archive' })).toBeVisible();
 
   assertQuiet();
+});
+
+/**
+ * Cancel used to create a batch for whatever had already arrived and open its
+ * monitor, which answered "stop" by leaving the page.
+ */
+test('stays where it is when an upload is cancelled, whatever had arrived', async ({ page }) => {
+  const assertQuiet = failOnConsoleErrors(page, [INJECTED_UPLOAD_FAILURES]);
+
+  await open(page, '/upload');
+  await page.locator('input[type="file"][accept]').setInputFiles(LONG_RUN);
+  await page.getByRole('button', { name: 'Start processing' }).click();
+
+  // Something has to have got through, or there would be nothing to make a batch of.
+  await expect(page.getByText('Sent', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  // Back to the selection, and still here a moment later.
+  await expect(page.getByText('documents ready to upload')).toBeVisible();
+  await page.waitForTimeout(3000);
+  await expect(page).toHaveURL(/\/upload$/);
+
+  await page.getByRole('link', { name: 'Batches' }).click();
+  await expect(page.getByText('No batches yet')).toBeVisible();
+
+  assertQuiet();
+});
+
+/**
+ * The page owns the queue. Left running after the operator had gone elsewhere,
+ * it finished unseen and then pulled them to a batch they never watched begin.
+ */
+test('abandons an upload when the operator leaves the page', async ({ page }) => {
+  await open(page, '/upload');
+  await page.locator('input[type="file"][accept]').setInputFiles(selection.concat(LONG_RUN));
+  await page.getByRole('button', { name: 'Start processing' }).click();
+  await expect(page.getByRole('list', { name: 'Upload queue' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Documents' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+
+  // Long enough for the run to have finished, had it carried on.
+  await page.waitForTimeout(12_000);
+  await expect(page).toHaveURL(/\/documents/);
+
+  await page.getByRole('link', { name: 'Batches' }).click();
+  await expect(page.getByText('No batches yet')).toBeVisible();
 });

@@ -61,22 +61,36 @@ function TaskRow({ task }: { task: QueueTask }) {
 
 type UploadQueueListProps = {
   snapshot: QueueSnapshot;
-  /** The browser reports no connection, which is why the queue is paused. */
+  /** The browser reports no connection. */
   offline?: boolean;
+  /** The pause is the queue's own, waiting for the connection, not the operator's. */
+  pausedForNetwork?: boolean;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
 };
 
 // Says why nothing is moving, since a pause the operator did not ask for needs explaining.
-function pausedLabel(snapshot: QueueSnapshot, offline: boolean): string {
+function pausedLabel(snapshot: QueueSnapshot, pausedForNetwork: boolean, offline: boolean): string {
   if (!snapshot.paused) return '';
-  return offline ? ' · paused until the connection comes back' : ' · paused';
+  if (pausedForNetwork) return ' · paused until the connection comes back';
+  // The operator's own pause stands when the connection returns, so it must
+  // not read as one that will lift itself.
+  return offline ? ' · paused · no connection' : ' · paused';
+}
+
+// What the run has settled for each file, in the words a screen reader gets as well.
+function outcomeLabel(snapshot: QueueSnapshot): string {
+  const parts = [`${formatCount(snapshot.succeeded)} sent`];
+  if (snapshot.failed > 0) parts.push(`${formatCount(snapshot.failed)} failed`);
+  if (snapshot.cancelled > 0) parts.push(`${formatCount(snapshot.cancelled)} cancelled`);
+  return parts.join(', ');
 }
 
 export function UploadQueueList({
   snapshot,
   offline = false,
+  pausedForNetwork = false,
   onPause,
   onResume,
   onCancel,
@@ -87,19 +101,28 @@ export function UploadQueueList({
     <Paper className="flex flex-col">
       <Box className="flex flex-wrap items-center justify-between gap-3 p-4">
         <Box>
+          {/* "Done" rather than "sent": a file the queue gave up on, or was
+              told to drop, is finished with but never arrived. */}
           <Typography variant="body2" className="figures">
-            {formatCount(finished)} of {formatCount(snapshot.total)} sent ·{' '}
+            {formatCount(finished)} of {formatCount(snapshot.total)} done ·{' '}
             {formatPercent(finished, snapshot.total)}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {formatCount(snapshot.running)} in flight · {formatCount(snapshot.failed)} failed
-            {pausedLabel(snapshot, offline)}
+            {outcomeLabel(snapshot)} · {formatCount(snapshot.running)} in flight
+            {pausedLabel(snapshot, pausedForNetwork, offline)}
           </Typography>
         </Box>
 
         <Box className="flex items-center gap-2">
           {snapshot.paused ? (
-            <Button size="small" startIcon={<PlayArrowIcon />} onClick={onResume}>
+            // Resuming against a dead network would only burn every file's
+            // attempts; the button waits with the queue.
+            <Button
+              size="small"
+              startIcon={<PlayArrowIcon />}
+              onClick={onResume}
+              disabled={offline}
+            >
               Resume
             </Button>
           ) : (
@@ -136,7 +159,7 @@ export function UploadQueueList({
 
       <ProgressAnnouncer
         step={decile(snapshot.completion)}
-        message={`${formatCount(finished)} of ${formatCount(snapshot.total)} files sent${snapshot.failed > 0 ? `, ${formatCount(snapshot.failed)} failed` : ''}.`}
+        message={`${formatCount(finished)} of ${formatCount(snapshot.total)} files done: ${outcomeLabel(snapshot)}.`}
         final={snapshot.settled}
       />
     </Paper>

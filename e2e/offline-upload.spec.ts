@@ -43,3 +43,25 @@ test('pauses the queue while offline and resumes when the connection returns', a
 
   assertQuiet();
 });
+
+/**
+ * Resuming against a dead network would only spend every file's attempts
+ * learning nothing, and the queue would then settle as a heap of failures.
+ */
+test('holds the pause while offline, even when asked to resume', async ({ page, context }) => {
+  await open(page, '/upload');
+  await page.locator('input[type="file"][accept]').setInputFiles(selection);
+  await expect(page.getByText('documents ready to upload')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Start processing' }).click();
+  await expect(page.getByRole('list', { name: 'Upload queue' })).toBeVisible();
+
+  await context.setOffline(true);
+
+  await expect(page.getByText('paused until the connection comes back')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Resume' })).toBeDisabled();
+
+  await context.setOffline(false);
+
+  await expect(page).toHaveURL(/\/batches\/[^/?]+$/, { timeout: 60_000 });
+});

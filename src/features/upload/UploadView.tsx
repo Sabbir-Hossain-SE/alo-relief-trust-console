@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { ErrorState } from '@/components/feedback/ErrorState';
@@ -30,6 +30,14 @@ function labelFor(firstPath: string | undefined): string {
   return folder.slice(0, BATCH_LABEL_MAX_LENGTH);
 }
 
+/** Resolves once the browser reports a connection, or at once if it already does. */
+function untilOnline(): Promise<void> {
+  if (navigator.onLine) return Promise.resolve();
+  return new Promise((resolve) =>
+    window.addEventListener('online', () => resolve(), { once: true }),
+  );
+}
+
 type SendState =
   | { status: 'idle' }
   | { status: 'sending' }
@@ -42,6 +50,16 @@ export function UploadView() {
   const [createBatch] = useCreateBatchMutation();
   const [send, setSend] = useState<SendState>({ status: 'idle' });
 
+  // A request can outlive the page it was sent from. The batch it creates is
+  // real either way; the navigation to it belongs to this page alone.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const uploading = queue.snapshot !== null && !queue.snapshot.settled;
   useUnloadWarning(uploading || send.status === 'sending');
 
@@ -51,12 +69,21 @@ export function UploadView() {
     try {
       const created = await createBatch(batch).unwrap();
 
+      // The archive answers from inside the browser; the next screen does not.
+      // A route change with no connection fails and the browser replaces the
+      // console with its own error page, so it waits for one.
+      await untilOnline();
+      if (!mounted.current) return;
+
       reset();
       queue.reset();
+      setSend({ status: 'idle' });
       // Straight to the monitor, not the grid: the next thing that matters is
       // whether processing succeeds, and the grid cannot show that as a whole.
       router.push(batchHref(created.id));
     } catch (error) {
+      if (!mounted.current) return;
+
       // The files are on the server; only the record grouping them is missing.
       // So this step is offered again, rather than the whole upload.
       setSend({
@@ -71,21 +98,33 @@ export function UploadView() {
     if (state.status !== 'ready') return;
 
     setSend({ status: 'sending' });
-    const result = await queue.run(state.result.files);
+    const { snapshot, cancelled } = await queue.run(state.result.files);
 
-    // Only what actually arrived becomes a batch. Counting the whole
-    // selection would overstate the archive by every file that failed.
-    if (result.succeeded === 0) {
-      setSend({ status: 'idle' });
+    // A cancelled run is not a batch, whatever had already arrived: the
+    // operator asked for it to stop, and opening a monitor for the part that
+    // got through would answer that by leaving the page. Nor is a run in which
+    // nothing arrived — counting the whole selection would overstate the
+    // archive by every file that failed.
+    if (cancelled || snapshot.succeeded === 0) {
+      if (mounted.current) setSend({ status: 'idle' });
       return;
     }
 
-    await openBatch({ label: labelFor(state.result.files[0]?.path), fileCount: result.succeeded });
+    await openBatch({
+      label: labelFor(state.result.files[0]?.path),
+      fileCount: snapshot.succeeded,
+    });
   }
 
   function discardQueue() {
+    const batchFailed = send.status === 'failed';
+
     queue.cancel();
     queue.reset();
+    // After a failed batch creation the files are already on the server, so the
+    // same selection is not offered again — starting it would send every one of
+    // them twice.
+    if (batchFailed) reset();
     setSend({ status: 'idle' });
   }
 
@@ -121,6 +160,7 @@ export function UploadView() {
           <UploadQueueList
             snapshot={queue.snapshot}
             offline={queue.offline}
+            pausedForNetwork={queue.pausedForNetwork}
             onPause={queue.pause}
             onResume={queue.resume}
             onCancel={discardQueue}
