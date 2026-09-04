@@ -112,10 +112,13 @@ not stored as objects at all.
 pnpm gen:pools    Faker, fixed seed, at build time → small dictionaries
                   2,000 names · 192 locations · 12 programs · 8 document types
                               ↓
-Boot              typed-array column store, 12 columns
+Boot              typed-array column store, 12 columns, built in slices behind the gate
                   Uint8Array status · Float32Array confidence · Uint32Array nameId → pool
+                  plus the archive's newest-first order, kept and folded into on upload
                               ↓
-Query             filter and sort walk the columns, writing row indices into a Uint32Array
+Query             filter walks the columns — in the kept order for the default view —
+                  writing row indices into a Uint32Array; any other order packs key and
+                  index into one float per row and uses the engine's own numeric sort
                               ↓
 Page              only the ~50 visible rows are materialized into objects
 ```
@@ -128,17 +131,19 @@ is `base ∪ overlay`.
 
 `pnpm bench`, 100,000 documents, on an M-series laptop:
 
-|                                             |                                           |
-| ------------------------------------------- | ----------------------------------------- |
-| Column store, exact                         | **2.96 MB** — 31.0 bytes per document     |
-| The same archive as objects                 | **~100 MB** — roughly a **30× reduction** |
-| Build the store at boot                     | **~125 ms**                               |
-| Filter the full archive                     | **1.8 ms**                                |
-| Filter + sort + page of 50 (71,942 matches) | **23 ms**                                 |
-| Free-text search across pooled names        | **5.5 ms**                                |
-| Read one page of 50 summaries               | **0.3 ms**                                |
-| Full archive breakdown for the overview     | **11 ms**                                 |
-| Render the whole archive as CSV (12.5 MB)   | **163 ms**                                |
+|                                                   |                                            |
+| ------------------------------------------------- | ------------------------------------------ |
+| Column store with its kept order, exact           | **3.34 MB** — 35.0 bytes per document      |
+| The same archive as objects                       | **~90 MB** — roughly a **27× reduction**   |
+| Build the store at boot                           | **~75 ms**, in ten slices behind the gate  |
+| Filter the full archive                           | **2.2 ms**                                 |
+| The default view: newest first, page of 50        | **3.4 ms** — was 23 ms, sorted per request |
+| Filter + sort by confidence + page of 50 (71,942) | **12 ms** — was 23 ms                      |
+| Fold 25,000 uploaded rows into the kept order     | **20 ms**, once per upload                 |
+| Free-text search across pooled names              | **6.4 ms**; a term matching nothing, 0.1   |
+| Read one page of 50 summaries                     | **0.3 ms**                                 |
+| Full archive breakdown for the overview           | **7 ms**                                   |
+| Render the whole archive as CSV (12.5 MB)         | **~190 ms**, streamed in 2,000-row chunks  |
 
 The store size is exact, read off `byteLength`. The object comparison is a heap measurement and
 genuinely noisy — a single sample swung between 25× and 38× — so the benchmark holds a real
@@ -157,8 +162,11 @@ The folder walk is chunked with `scheduler.yield()` and is cancellable, which is
 that gap small. A naive recursive walk holds the main thread for seconds: no paint, no scroll,
 no cancel button.
 
-Client JavaScript for the whole app, all route chunks, gzipped: **659 KB**. MUI X DataGrid and
-the MUI/Emotion runtime dominate it; see _what I would do with more time_.
+Client JavaScript, first load, gzipped, per route (`pnpm bundle`): **334 KB** on the overview,
+upload, batches and review screens, **507 KB** on the documents grid — MUI X DataGrid is the
+difference — plus 98 KB for the mock backend's worker, fetched beside the page. The phone
+numbering plans and the name pool used to ship on every route through the wire contract; they
+now load with the correction form and the handlers alone. See _what I would do with more time_.
 
 ---
 
@@ -278,8 +286,12 @@ client would otherwise have to page 100,000 rows out of an API that caps a page 
 hundred round trips for a file the backend writes in one pass. **100,000 rows is 12.5 MB and
 takes 163 ms** to produce.
 
-The response is read as a stream rather than awaited as a blob, which is what gives the export
-a progress bar and something to cancel: the request is aborted mid-body, not merely ignored.
+The file is streamed two thousand rows at a time with a breath between chunks, so the page
+paints while it is written — built as one string it was a fifth of a second the page could not
+paint through. The response is read as a stream rather than awaited as a blob, which is what
+gives the export a progress bar and something to cancel: the request is aborted mid-body, not
+merely ignored. A streamed file has no exact length ahead of time, so the server declares an
+estimate scaled up from its first chunk and the bar says it is reading one.
 
 Three details that are easy to get wrong and that a spreadsheet punishes:
 
@@ -380,11 +392,12 @@ Two habits worth naming:
 
 1. **Replace polling with SSE or a WebSocket.** Adaptive polling is the honest workaround for a
    mock backend, not the design.
-2. **Cut the bundle.** 659 KB gzipped is more than this UI needs. MUI X DataGrid is most of it,
-   and the grid uses a fraction of its features — a smaller table over the existing
-   virtualization would likely halve the total.
-3. **Move corpus generation and querying into a Worker.** The 23 ms full query is fine, but
-   it is on the main thread; at a million documents it would not be.
+2. **Cut the bundle.** 334 KB gzipped on the overview is more than this UI needs, and the grid's
+   507 KB is mostly MUI X DataGrid, of which the grid uses a fraction — a smaller table over
+   the existing virtualization would likely halve that route.
+3. **Move corpus generation and querying into a Worker.** The default view costs 3 ms now and
+   the archive is built in slices behind the gate, but every pass over the columns is still on
+   the main thread; at a million documents it would not be.
 4. **Persist the archive to IndexedDB**, so a reload does not start over. The in-memory backend
    is the reason a batch link dies on refresh — the app says so plainly rather than pretending.
 5. **Bulk correction.** Corrections are per document; a queue of 7,900 wants "apply to all
