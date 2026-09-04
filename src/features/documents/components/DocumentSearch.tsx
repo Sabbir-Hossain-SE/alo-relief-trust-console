@@ -59,7 +59,10 @@ export function DocumentSearch({ value, onChange }: DocumentSearchProps) {
         }
       }}
       placeholder="Name, location or ID"
-      sx={{ minWidth: { xs: '100%', sm: 280 } }}
+      // Flexible rather than fixed: at a fixed 280 the row it sits in wrapped
+      // by a handful of pixels on a small laptop with the navigation expanded,
+      // which put the type filter on a line of its own.
+      sx={{ flex: '1 1 200px', minWidth: 0, maxWidth: { xs: '100%', sm: 320 } }}
       slotProps={{
         // Held open rather than left to float. An unshrunk label would sit on
         // top of the search icon, and a label that only appears once the field
