@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useAppDispatch, useAppSelector, useAppStore } from './hooks';
 import {
+  NAV_COLLAPSED_ATTRIBUTE,
   PREFERENCES_STORAGE_KEY,
   hydratePreferences,
   loadPreferences,
@@ -34,11 +35,19 @@ export function usePreferencesSync(): void {
   useEffect(() => {
     let previous = store.getState().preferences;
 
+    // The mark the rail is laid out from. Written here, beside storage, rather
+    // than from a component effect: an effect keyed on state would run once
+    // with the defaults before storage had been read and clear the mark the
+    // inline script set, which is the flash this exists to remove.
+    const reflect = (value: Preferences) => {
+      document.documentElement.toggleAttribute(NAV_COLLAPSED_ATTRIBUTE, value.navCollapsed);
+    };
+
     // Reads storage into the store without writing it straight back out.
     const adopt = () => {
-      const loaded = loadPreferences();
-      dispatch(hydratePreferences(loaded));
+      dispatch(hydratePreferences(loadPreferences()));
       previous = store.getState().preferences;
+      reflect(previous);
     };
 
     adopt();
@@ -49,6 +58,7 @@ export function usePreferencesSync(): void {
 
       previous = current;
       savePreferences(current);
+      reflect(current);
     });
 
     // A null key is the whole storage being cleared, which also changes ours.

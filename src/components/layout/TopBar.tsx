@@ -9,7 +9,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import { BrandMark } from './BrandMark';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
-import { TOP_BAR_HEIGHT } from './navigation';
+import { TOP_BAR_HEIGHT, WHEN_NAV_COLLAPSED } from './navigation';
 
 type TopBarProps = {
   navCollapsed: boolean;
@@ -64,7 +64,10 @@ export function TopBar({ navCollapsed, onToggleNav, onOpenNav }: TopBarProps) {
             aria-controls="main-navigation"
             sx={{ display: { xs: 'none', md: 'inline-flex' } }}
           >
-            {navCollapsed ? <MenuIcon /> : <MenuOpenIcon />}
+            {/* Both drawn, one shown, by the same mark the rail is laid out
+                from — so the icon is right on the first paint as well. */}
+            <MenuIcon sx={{ display: 'none', [WHEN_NAV_COLLAPSED]: { display: 'inline-block' } }} />
+            <MenuOpenIcon sx={{ [WHEN_NAV_COLLAPSED]: { display: 'none' } }} />
           </IconButton>
         </Tooltip>
 

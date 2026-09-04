@@ -1,14 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expectNoViolations } from '@/test/axe';
 import { renderWithTheme } from '@/test/render';
+import { NAV_COLLAPSED_ATTRIBUTE } from '@/store/preferences';
 import { NavList } from './NavList';
 import { NAV_ITEMS } from './navigation';
 
 const pathname = vi.hoisted(() => ({ value: '/documents' }));
 
 vi.mock('next/navigation', () => ({ usePathname: () => pathname.value }));
+
+// The rail is laid out from the document's mark, so a collapsed test sets both.
+function renderCollapsed() {
+  document.documentElement.setAttribute(NAV_COLLAPSED_ATTRIBUTE, '');
+  return renderWithTheme(<NavList collapsed />);
+}
+
+afterEach(() => document.documentElement.removeAttribute(NAV_COLLAPSED_ATTRIBUTE));
 
 describe('NavList', () => {
   it('links to every destination', () => {
@@ -31,7 +40,7 @@ describe('NavList', () => {
    * would leave five links whose only accessible name is an icon.
    */
   it('keeps every link named when collapsed', () => {
-    renderWithTheme(<NavList collapsed />);
+    renderCollapsed();
 
     for (const item of NAV_ITEMS) {
       expect(screen.getByRole('link', { name: item.label })).toBeInTheDocument();
@@ -39,7 +48,7 @@ describe('NavList', () => {
   });
 
   it('names a collapsed link on hover, for everyone who is not using a reader', async () => {
-    renderWithTheme(<NavList collapsed />);
+    renderCollapsed();
 
     await userEvent.hover(screen.getByRole('link', { name: 'Review queue' }));
 
@@ -74,7 +83,8 @@ describe('NavList', () => {
     const expanded = renderWithTheme(<NavList />);
     await expectNoViolations(expanded.container);
 
-    const collapsed = renderWithTheme(<NavList collapsed />);
+    expanded.unmount();
+    const collapsed = renderCollapsed();
     await expectNoViolations(collapsed.container);
   });
 });
