@@ -14,6 +14,18 @@ import {
 export const POLL_INTERVAL_MS = 1500;
 
 /**
+ * How soon to ask again, given the last answer.
+ *
+ * An error stops the clock as surely as the work finishing does. Asking every
+ * second and a half for a batch that is not there filled the console with 404s
+ * and made the visible "Try again" a lie — it is the retry, and the one the
+ * operator controls.
+ */
+export function nextPollInterval(isError: boolean, settled: boolean | undefined): number {
+  return isError || settled === true ? 0 : POLL_INTERVAL_MS;
+}
+
+/**
  * Every poll here skips while the tab is in the background.
  *
  * Each tick re-reads the archive — a hundred thousand rows filtered and sorted
@@ -41,7 +53,7 @@ export function useBatch(batchId: string | undefined) {
     skipPollingIfUnfocused: true,
   });
 
-  const desired = result.data !== undefined && result.data.settled ? 0 : POLL_INTERVAL_MS;
+  const desired = nextPollInterval(result.isError, result.data?.settled);
   if (interval !== desired) setPollInterval(desired);
 
   return result;
@@ -56,8 +68,9 @@ export function useBatches() {
     skipPollingIfUnfocused: true,
   });
 
-  const anyRunning = result.data?.some((batch) => !batch.settled) ?? false;
-  const desired = result.data !== undefined && !anyRunning ? 0 : POLL_INTERVAL_MS;
+  const allSettled =
+    result.data === undefined ? undefined : result.data.every((batch) => batch.settled);
+  const desired = nextPollInterval(result.isError, allSettled);
   if (interval !== desired) setPollInterval(desired);
 
   return result;
