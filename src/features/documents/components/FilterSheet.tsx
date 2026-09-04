@@ -67,7 +67,10 @@ export function FilterSheet({
       }}
       slotProps={{
         paper: {
-          sx: { maxHeight: '85vh' },
+          // dvh where the browser has it: on iOS, vh is the viewport with the
+          // toolbar hidden, so a sheet sized by it ran under the toolbar and
+          // its buttons were the part that was cut off.
+          sx: { maxHeight: '85vh', '@supports (height: 1dvh)': { maxHeight: '85dvh' } },
           role: 'dialog',
           'aria-modal': true,
           'aria-label': 'Filters',
