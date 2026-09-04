@@ -439,8 +439,14 @@ identifiers, counts and timestamps so numbers do not jitter as they tick up. Fra
 loaded and appears in exactly one place: the wordmark, which is a logo rather than a heading.
 One family for the interface means the hierarchy has to come from size, weight and tracking, so
 the headings carry negative letter-spacing that tightens as they grow — Inter left at its
-default spacing reads as loose at 40px beside 14px body text, which is how a single-family scale
-ends up looking accidental rather than chosen.
+default spacing reads as loose beside 14px body text, which is how a single-family scale ends up
+looking accidental rather than chosen.
+
+The chrome is deliberately quiet: 28px page title, 20px section heading, 16px card title. This
+is a screen worked for hours, and a banner across the top of it earns nothing. **Figures are not
+headings** and have their own two sizes — the archive total at 40px, the counts at 28px. They
+were set in `h1` and `h2` until the headings came down, which had tied the size of the number
+being read to the size of the label above it.
 
 Motion is slow, and only ever communicates a state change.
 
