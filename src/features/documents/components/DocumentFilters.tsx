@@ -29,7 +29,7 @@ function toggle<T>(values: readonly T[] | undefined, value: T): T[] {
 
 export function DocumentFilters({ query, isFiltered, onChange, onClear }: DocumentFiltersProps) {
   return (
-    <Box className="mb-4 flex flex-col gap-3">
+    <Box className="flex flex-col gap-3">
       <Box className="flex flex-wrap items-center gap-2">
         <DocumentSearch
           value={query.search ?? ''}

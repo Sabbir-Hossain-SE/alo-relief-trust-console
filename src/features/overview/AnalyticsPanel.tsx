@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import { formatConfidence } from '@/domain/confidence';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import { formatCount } from '@/lib/format/number';
+import { SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { useAnalytics } from '@/store/polling';
 import { BreakdownCard } from './components/BreakdownCard';
 import { confidenceRows, failureRows, typeRows } from './breakdowns';
@@ -24,14 +25,14 @@ export function AnalyticsPanel() {
   const { data, isLoading, isError, refetch } = useAnalytics();
 
   const heading = (
-    <Typography variant="h2" component="h2" sx={{ fontSize: '1.25rem' }}>
+    <Typography variant="h2" component="h2">
       Archive breakdown
     </Typography>
   );
 
   if (isError) {
     return (
-      <Box className="flex flex-col gap-4">
+      <Box className={SECTION_CONTENT_GAP}>
         {heading}
         <ErrorState
           title="The archive breakdown could not be read"
@@ -44,7 +45,7 @@ export function AnalyticsPanel() {
 
   if (isLoading || data === undefined) {
     return (
-      <Box className="flex flex-col gap-4">
+      <Box className={SECTION_CONTENT_GAP}>
         {heading}
         <Skeleton variant="text" width={320} />
         <Box className={GRID}>
@@ -57,7 +58,7 @@ export function AnalyticsPanel() {
   }
 
   return (
-    <Box className="flex flex-col gap-4">
+    <Box className={SECTION_CONTENT_GAP}>
       {heading}
 
       {/* The one figure that names the work still outstanding. */}

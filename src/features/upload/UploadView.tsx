@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { PageSections, SECTION_CONTENT_GAP } from '@/components/layout/PageSections';
 import { batchHref } from '@/features/batches/links';
 import { useCreateBatchMutation } from '@/store/api';
 import { IndexingProgress, IngestSummary } from './components/IngestSummary';
@@ -55,13 +56,13 @@ export function UploadView() {
   }
 
   return (
-    <>
+    <PageSections>
       <PageHeader
         title="Upload"
         description="Add documents to the archive. A folder of any size is indexed before anything is sent."
       />
 
-      <Box className="flex flex-col gap-4">
+      <Box className={SECTION_CONTENT_GAP}>
         {state.status === 'idle' ? (
           <UploadDropzone
             onEntries={(entries) => void ingestEntries(entries)}
@@ -94,6 +95,6 @@ export function UploadView() {
           />
         ) : null}
       </Box>
-    </>
+    </PageSections>
   );
 }
