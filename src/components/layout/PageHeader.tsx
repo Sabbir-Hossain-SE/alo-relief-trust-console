@@ -11,9 +11,11 @@ type PageHeaderProps = {
 // Page title block, with room for the primary actions of the screen.
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <Box className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <Box className="flex flex-wrap items-start justify-between gap-4">
       <Box className="min-w-0">
-        <Typography variant="h1" component="h1" sx={{ fontSize: { xs: '1.75rem', md: '2.25rem' } }}>
+        {/* Steps down on a small screen only. The desktop size is the scale's
+            own, rather than a third value that exists nowhere else in it. */}
+        <Typography variant="h1" component="h1" sx={{ fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
           {title}
         </Typography>
         {description ? (

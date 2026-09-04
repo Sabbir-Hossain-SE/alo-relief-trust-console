@@ -3,7 +3,7 @@
 import { useId } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { brandMark } from '@/theme/tokens';
+import { brandMark, fontStacks } from '@/theme/tokens';
 
 type BrandMarkProps = {
   /** Drops the second line, for the bar where there is one line of room. */
@@ -74,7 +74,14 @@ export function BrandMark({ compact = false }: BrandMarkProps) {
       <Mark />
 
       <Box className="leading-tight">
-        <Typography variant="h3" component="span" className="block" sx={{ fontSize: '1rem' }}>
+        {/* The one place the display face is still used. It is a wordmark, not
+            a heading: the interface is set in Inter throughout. */}
+        <Typography
+          variant="h3"
+          component="span"
+          className="block"
+          sx={{ fontFamily: fontStacks.display, fontSize: '1rem', letterSpacing: 0 }}
+        >
           Alo Relief Trust
         </Typography>
         {compact ? null : (

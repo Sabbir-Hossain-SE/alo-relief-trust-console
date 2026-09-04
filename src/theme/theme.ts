@@ -82,9 +82,36 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
     typography: {
       fontFamily: fontStacks.body,
       // Fraunces carries titles and hero figures only. Everything else is Inter.
-      h1: { fontFamily: fontStacks.display, fontSize: '2.5rem', lineHeight: 1.15, fontWeight: 600 },
-      h2: { fontFamily: fontStacks.display, fontSize: '1.75rem', lineHeight: 1.2, fontWeight: 600 },
-      h3: { fontFamily: fontStacks.display, fontSize: '1.25rem', lineHeight: 1.3, fontWeight: 600 },
+      /**
+       * One typeface for the interface. Inter needs negative tracking to hold
+       * together at display sizes — set at its default spacing, a 40px heading
+       * reads as loose beside 14px body text, which is the usual way a
+       * single-family scale ends up looking accidental rather than chosen.
+       *
+       * Fraunces is still loaded and is used in exactly one place: the wordmark
+       * in `BrandMark`, which is a logo rather than a heading.
+       */
+      h1: {
+        fontFamily: fontStacks.body,
+        fontSize: '2.5rem',
+        lineHeight: 1.15,
+        fontWeight: 600,
+        letterSpacing: '-0.022em',
+      },
+      h2: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.75rem',
+        lineHeight: 1.25,
+        fontWeight: 600,
+        letterSpacing: '-0.018em',
+      },
+      h3: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.25rem',
+        lineHeight: 1.35,
+        fontWeight: 600,
+        letterSpacing: '-0.012em',
+      },
       body1: { fontSize: '0.875rem', lineHeight: 1.5 },
       body2: { fontSize: '0.8125rem', lineHeight: 1.5 },
       button: { textTransform: 'none', fontWeight: 500 },
