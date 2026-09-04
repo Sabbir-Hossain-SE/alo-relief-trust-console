@@ -40,6 +40,7 @@ export function TopBar({ navCollapsed, onToggleNav, onOpenNav }: TopBarProps) {
         // put an unreachable control on top of a modal.
         backdropFilter: 'blur(8px)',
         backgroundColor: 'background.default',
+        border: 'none',
         borderBottom: '1px solid',
         borderColor: 'divider',
       }}

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { createTheme } from '@mui/material/styles';
 import type { ProcessingStatus } from '@/domain/status';
 import {
@@ -11,7 +12,23 @@ import {
   type StatusTone,
 } from './tokens';
 
+declare module '@mui/material/Typography' {
+  interface TypographyPropsVariantOverrides {
+    figureLarge: true;
+    figureMedium: true;
+  }
+}
+
 declare module '@mui/material/styles' {
+  interface TypographyVariants {
+    figureLarge: CSSProperties;
+    figureMedium: CSSProperties;
+  }
+  interface TypographyVariantsOptions {
+    figureLarge?: CSSProperties;
+    figureMedium?: CSSProperties;
+  }
+
   interface Palette {
     status: Record<ProcessingStatus, StatusTone>;
     accent: string;
@@ -93,24 +110,48 @@ export function createAppTheme({ reduceMotion = false }: ThemeOptions = {}) {
        */
       h1: {
         fontFamily: fontStacks.body,
-        fontSize: '2.5rem',
-        lineHeight: 1.15,
-        fontWeight: 600,
-        letterSpacing: '-0.022em',
-      },
-      h2: {
-        fontFamily: fontStacks.body,
         fontSize: '1.75rem',
-        lineHeight: 1.25,
+        lineHeight: 1.2,
         fontWeight: 600,
         letterSpacing: '-0.018em',
       },
-      h3: {
+      h2: {
         fontFamily: fontStacks.body,
         fontSize: '1.25rem',
-        lineHeight: 1.35,
+        lineHeight: 1.3,
         fontWeight: 600,
         letterSpacing: '-0.012em',
+      },
+      h3: {
+        fontFamily: fontStacks.body,
+        fontSize: '1rem',
+        lineHeight: 1.4,
+        fontWeight: 600,
+        letterSpacing: '-0.008em',
+      },
+
+      /**
+       * Numbers, not headings.
+       *
+       * The counts on this screen were set in h1 and h2, which tied the size of
+       * the archive total to the size of a page title. They are different jobs:
+       * the chrome should be quiet on a console worked for hours, and the
+       * figure is the thing being read. Separating them is what lets the
+       * headings come down without taking the data with them.
+       */
+      figureLarge: {
+        fontFamily: fontStacks.body,
+        fontSize: '2.5rem',
+        lineHeight: 1.1,
+        fontWeight: 600,
+        letterSpacing: '-0.022em',
+      },
+      figureMedium: {
+        fontFamily: fontStacks.body,
+        fontSize: '1.75rem',
+        lineHeight: 1.15,
+        fontWeight: 600,
+        letterSpacing: '-0.018em',
       },
       body1: { fontSize: '0.875rem', lineHeight: 1.5 },
       body2: { fontSize: '0.8125rem', lineHeight: 1.5 },

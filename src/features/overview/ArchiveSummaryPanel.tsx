@@ -49,7 +49,7 @@ export function ArchiveSummaryPanel() {
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Documents in the archive
         </Typography>
-        <Typography variant="h1" component="p" className="figures" sx={{ mt: 0.5 }}>
+        <Typography variant="figureLarge" component="p" className="figures" sx={{ mt: 0.5 }}>
           {formatCount(data.total)}
         </Typography>
       </Paper>
