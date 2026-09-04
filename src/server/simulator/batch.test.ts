@@ -247,6 +247,48 @@ describe('summarizeBatch', () => {
   });
 });
 
+describe('the cached split', () => {
+  /** What a walk of the batch says right now, computed the slow way. */
+  function fresh(overlay: Overlay, batch: Batch) {
+    const counts = Object.fromEntries(PROCESSING_STATUSES.map((status) => [status, 0])) as Record<
+      (typeof PROCESSING_STATUSES)[number],
+      number
+    >;
+    for (const index of batch.indices) counts[summaryAt(store, overlay, index).status] += 1;
+    return counts;
+  }
+
+  it('matches a fresh walk after every kind of change', () => {
+    const { overlay, batch } = setup(120);
+    const cfg = config({ concurrency: 8, serviceTimeMs: 200 });
+    const now = T0 + 1000;
+
+    advanceBatch(overlay, batch, SEED, now, cfg);
+    expect(summarizeBatch(store, overlay, batch, now).counts).toEqual(fresh(overlay, batch));
+
+    const settledAt = runToCompletion(overlay, batch, cfg);
+    expect(summarizeBatch(store, overlay, batch, settledAt).counts).toEqual(fresh(overlay, batch));
+
+    const failed = [...batch.indices].filter(
+      (index) => summaryAt(store, overlay, index).status === 'failed',
+    );
+    requeue(batch, overlay, failed);
+    expect(summarizeBatch(store, overlay, batch, settledAt).counts).toEqual(fresh(overlay, batch));
+  });
+
+  it('is counted once between changes, and still follows the clock', () => {
+    const { overlay, batch } = setup(40);
+    const cfg = config({ concurrency: 4, serviceTimeMs: 200 });
+
+    advanceBatch(overlay, batch, SEED, T0 + 900, cfg);
+    const first = summarizeBatch(store, overlay, batch, T0 + 900);
+    const again = summarizeBatch(store, overlay, batch, T0 + 5000);
+
+    expect(again.counts).toBe(first.counts);
+    expect(again.throughput).not.toBe(first.throughput);
+  });
+});
+
 describe('requeue', () => {
   function failedIndices(overlay: Overlay, batch: Batch): number[] {
     return [...batch.indices].filter(
