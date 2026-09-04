@@ -53,6 +53,30 @@ function subscribeToConnection(onChange: () => void): () => void {
   };
 }
 
+/**
+ * Runs `flush` once per animation frame, however often it is asked.
+ *
+ * A queue reports every change as it happens — several per file, six files
+ * in flight — and each report used to be a render of the whole upload view.
+ * One frame's worth at a time is all a screen can show.
+ */
+function framePacer(flush: () => void): () => void {
+  let scheduled = false;
+  const schedule =
+    typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (callback: () => void) => setTimeout(callback, 16);
+
+  return () => {
+    if (scheduled) return;
+    scheduled = true;
+    schedule(() => {
+      scheduled = false;
+      flush();
+    });
+  };
+}
+
 // Whether the browser believes it has a connection. The server cannot know, so it says yes.
 function useIsOnline(): boolean {
   return useSyncExternalStore(
@@ -121,22 +145,20 @@ export function useUploadQueue() {
         size: file.size,
       }));
 
-      const queue = createUploadQueue(items, {
+      // Only the queue this hook still owns may render. A discarded queue's
+      // workers unwind after the reset, and would otherwise put its last
+      // snapshot straight back on screen.
+      const render = framePacer(() => {
+        if (queueRef.current === queue) setSnapshot(queue.snapshot());
+      });
+
+      const queue: UploadQueue = createUploadQueue(items, {
         concurrency: 6,
         maxAttempts: 3,
-        run: async (item, context) => {
-          // Coarse but honest: the mock backend has no upload stream to report
-          // against, so a file is either in flight or done.
-          context.onProgress(0.1);
-          await uploadFile(item, context.signal);
-          context.onProgress(1);
-        },
-        // Only the queue this hook still owns may render. A discarded queue's
-        // workers unwind after the reset, and would otherwise put its last
-        // snapshot straight back on screen.
-        onChange: (next) => {
-          if (queueRef.current === queue) setSnapshot(next);
-        },
+        // The mock backend has no upload stream to report against, so a file
+        // is either in flight or done; the row says which without a number.
+        run: (item, context) => uploadFile(item, context.signal),
+        onChange: render,
       });
 
       queueRef.current = queue;

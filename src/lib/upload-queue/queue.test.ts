@@ -42,6 +42,50 @@ describe('concurrency', () => {
     expect(queue.snapshot().succeeded).toBe(50);
   });
 
+  /**
+   * A snapshot used to copy and recount every task, five times per file, so a
+   * queue of tens of thousands spent its time describing itself. The count of
+   * changes is the observable; the cost per change is what shrank.
+   */
+  it('reports a number of changes that grows with the queue, not with its square', async () => {
+    const changes = async (count: number) => {
+      let seen = 0;
+      const queue = createUploadQueue(
+        Array.from({ length: count }, (_, i) => ({ id: `f${i}`, label: `f${i}` })),
+        { concurrency: 8, run: async () => {}, onChange: () => (seen += 1) },
+      );
+      await queue.start();
+      return seen;
+    };
+
+    const small = await changes(200);
+    const large = await changes(800);
+
+    expect(large / small).toBeLessThan(4.5);
+    expect(large).toBeLessThan(800 * 4);
+  });
+
+  it('hands out the same task object until it changes', async () => {
+    const queue = createUploadQueue(
+      [
+        { id: 'a', label: 'a' },
+        { id: 'b', label: 'b' },
+      ],
+      {
+        concurrency: 1,
+        run: async () => {},
+      },
+    );
+
+    const before = queue.snapshot().tasks[1];
+    await queue.start();
+    const after = queue.snapshot();
+
+    expect(after.tasks[1]).not.toBe(before);
+    expect(after.tasks[1]?.status).toBe('succeeded');
+    expect(after.succeeded).toBe(2);
+  });
+
   it('reports the running count while work is in flight', async () => {
     const seen: number[] = [];
 

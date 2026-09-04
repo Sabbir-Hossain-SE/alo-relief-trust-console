@@ -75,11 +75,27 @@ export function VirtualList<T>({
   const end = Math.min(items.length, start + visibleCount + overscan * 2);
   const window = items.slice(start, end);
 
+  // Read once per frame. A wheel or a trackpad raises scroll events faster
+  // than frames are painted, and each one was a render of every windowed row.
+  const frame = useRef<number | null>(null);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
-    // Real scrolling has taken over, so the anchor is no longer needed.
-    setAnchor(null);
-    setScrollTop(event.currentTarget.scrollTop);
+    const node = event.currentTarget;
+    if (frame.current !== null) return;
+
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      // Real scrolling has taken over, so the anchor is no longer needed.
+      setAnchor(null);
+      setScrollTop(node.scrollTop);
+    });
   }
+
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
 
   /** Moves the tab stop and scrolls far enough that the row is actually rendered. */
   const moveTo = useCallback(
@@ -163,7 +179,9 @@ export function VirtualList<T>({
                 aria-setsize={items.length}
                 aria-posinset={index + 1}
                 onFocus={roving ? () => setActive(index) : undefined}
-                sx={{ height: itemHeight }}
+                // A plain style: an sx object per row per render is a style
+                // serialised per row per render.
+                style={{ height: itemHeight }}
               >
                 {renderItem(item, index, {
                   tabIndex: roving && index === activeIndex ? 0 : -1,
