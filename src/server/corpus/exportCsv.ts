@@ -2,7 +2,7 @@ import { confidenceBand } from '@/domain/confidence';
 import { DOCUMENT_TYPE_LABELS, type DocumentSummary } from '@/domain/document';
 import { describeError } from '@/domain/errors';
 import { STATUS_LABELS } from '@/domain/status';
-import { toCsv } from '@/lib/csv/serialize';
+import { CSV_BOM, csvRow } from '@/lib/csv/serialize';
 import type { ColumnStore } from './columnStore';
 import { summaryAt } from './documentAt';
 import type { Overlay } from './overlay';
@@ -63,15 +63,45 @@ function* rows(
   for (const index of indices) yield rowFor(summaryAt(store, overlay, index));
 }
 
+/** Rows per chunk: a few milliseconds of work each, a few dozen chunks for the archive. */
+export const CSV_CHUNK_ROWS = 2000;
+
 /**
- * Renders matching documents as a CSV file.
+ * Renders matching documents as CSV, a chunk of whole rows at a time.
  *
- * Built here rather than in the browser because the client would otherwise have
- * to page 100,000 rows out of an API that caps a page at 200 — five hundred
- * round trips to produce a file the backend can write in one pass.
+ * Built here rather than in the browser because the client would otherwise
+ * have to page 100,000 rows out of an API that caps a page at 200 — five
+ * hundred round trips to produce a file the backend can write in one pass.
+ * Yielded in chunks so that pass can be streamed with a breath between them:
+ * as one string it was a fifth of a second the page could not paint through.
+ * The first chunk carries the byte order mark and the header.
  */
+export function* csvChunks(
+  store: ColumnStore,
+  overlay: Overlay,
+  indices: Uint32Array,
+  rowsPerChunk = CSV_CHUNK_ROWS,
+): Generator<string> {
+  let chunk = CSV_BOM + csvRow(DOCUMENT_CSV_COLUMNS);
+  let count = 0;
+
+  for (const row of rows(store, overlay, indices)) {
+    chunk += csvRow(row);
+    count += 1;
+
+    if (count === rowsPerChunk) {
+      yield chunk;
+      chunk = '';
+      count = 0;
+    }
+  }
+
+  if (chunk !== '') yield chunk;
+}
+
+/** The whole file as one string, for callers that want it in hand. */
 export function documentsToCsv(store: ColumnStore, overlay: Overlay, indices: Uint32Array): string {
-  return toCsv(DOCUMENT_CSV_COLUMNS, rows(store, overlay, indices));
+  return [...csvChunks(store, overlay, indices)].join('');
 }
 
 /** Names the file after what it holds, so a folder of exports is navigable. */

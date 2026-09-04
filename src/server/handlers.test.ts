@@ -683,6 +683,18 @@ describe('GET /documents/export', () => {
     ).toEqual(page.body.rows.map((row) => row.id));
   });
 
+  // A streamed file has no exact length ahead of time, so the bar reads an
+  // estimate scaled up from the first rows; it has to be in the right region.
+  it('estimates the file size within a fifth, and declares no exact length', async () => {
+    const { headers, text } = await exportCsv();
+    const estimate = Number(headers.get('x-content-length-estimate'));
+    const actual = new TextEncoder().encode(text).byteLength;
+
+    expect(headers.get('content-length')).toBeNull();
+    expect(estimate).toBeGreaterThan(actual * 0.8);
+    expect(estimate).toBeLessThan(actual * 1.2);
+  });
+
   it('writes a header-only file when the filter matches nothing', async () => {
     const { text, headers } = await exportCsv('?q=zzzzz-no-such-record');
 

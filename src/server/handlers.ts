@@ -15,7 +15,8 @@ import {
 import { correctionsSchema } from './correction-contract';
 import { analyzeArchive } from './corpus/analytics';
 import { indexFromId, detailAt, summaryAt } from './corpus/documentAt';
-import { documentsToCsv, exportFileName } from './corpus/exportCsv';
+import { yieldToMain } from '@/lib/file-ingest/yielding';
+import { CSV_CHUNK_ROWS, csvChunks, exportFileName } from './corpus/exportCsv';
 import { countByStatus, orderedIndices, queryDocuments } from './corpus/query';
 import {
   advanceAll,
@@ -53,6 +54,12 @@ function resolveIndex(id: string | readonly string[] | undefined): number | null
   const index = indexFromId(id);
 
   return index !== null && index < db.store.size ? index : null;
+}
+
+// Scales the first chunk's size to the whole file. Exact when the file fits in one chunk.
+function estimateBytes(firstChunkBytes: number, rows: number): number {
+  const rowsInFirst = Math.min(rows, CSV_CHUNK_ROWS);
+  return rowsInFirst === 0 ? firstChunkBytes : Math.round((firstChunkBytes * rows) / rowsInFirst);
 }
 
 export const handlers = [
@@ -107,13 +114,44 @@ export const handlers = [
     const query = fromSearchParams(new URL(request.url).searchParams);
     const ordered = orderedIndices(db.store, db.overlay, query);
 
-    return new HttpResponse(documentsToCsv(db.store, db.overlay, ordered), {
+    // Streamed a chunk of rows at a time, with a breath between chunks. Built
+    // as one string, the whole archive was a fifth of a second the page could
+    // not paint through, and the progress bar could not move until the file
+    // already existed. The first chunk is in hand before the headers go out:
+    // it carries the header row, and its size gives the estimate below.
+    const chunks = csvChunks(db.store, db.overlay, ordered);
+    const encoder = new TextEncoder();
+    const first = encoder.encode(chunks.next().value ?? '');
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(first);
+      },
+      async pull(controller) {
+        const next = chunks.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+
+        controller.enqueue(encoder.encode(next.value));
+        // Without this the chunks would drain through a chain of microtasks
+        // and reassemble into the very long task being avoided.
+        await yieldToMain();
+      },
+    });
+
+    return new HttpResponse(stream, {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
         'content-disposition': `attachment; filename="${exportFileName()}"`,
         // The count the interface reports, without the client having to parse
         // the file to find out how many rows it got.
         'x-total-count': String(ordered.length),
+        // A streamed file has no exact length ahead of time, and a declared
+        // one that the body does not match risks truncation; the first rows
+        // give a fair estimate, which the bar reads as one.
+        'x-content-length-estimate': String(estimateBytes(first.byteLength, ordered.length)),
       },
     });
   }),

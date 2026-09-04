@@ -3,7 +3,7 @@ import { CSV_BOM } from '@/lib/csv/serialize';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
 import { buildColumnStore } from './columnStore';
 import { documentId } from './documentAt';
-import { DOCUMENT_CSV_COLUMNS, documentsToCsv, exportFileName } from './exportCsv';
+import { DOCUMENT_CSV_COLUMNS, csvChunks, documentsToCsv, exportFileName } from './exportCsv';
 import { applyPatch, createOverlay } from './overlay';
 import { filterIndices } from './query';
 
@@ -133,5 +133,32 @@ describe('exportFileName', () => {
     expect(exportFileName(new Date('2026-09-04T09:30:00Z'))).toBe(
       'alo-relief-trust-documents-2026-09-04.csv',
     );
+  });
+});
+
+describe('csvChunks', () => {
+  const overlay = createOverlay();
+  const all = filterIndices(store, overlay, {});
+
+  it('joins back into the same file, whatever the chunk size', () => {
+    const whole = documentsToCsv(store, overlay, all);
+
+    expect([...csvChunks(store, overlay, all, 7)].join('')).toBe(whole);
+    expect([...csvChunks(store, overlay, all, 100_000)].join('')).toBe(whole);
+  });
+
+  it('puts the byte order mark and the header in the first chunk, and whole rows in each', () => {
+    const chunks = [...csvChunks(store, overlay, all, 250)];
+
+    expect(chunks[0]?.startsWith(CSV_BOM + 'ID,')).toBe(true);
+    expect(chunks).toHaveLength(Math.ceil(SIZE / 250));
+    for (const chunk of chunks) expect(chunk.endsWith('\r\n')).toBe(true);
+  });
+
+  it('yields the header alone for a filter that matches nothing', () => {
+    const chunks = [...csvChunks(store, overlay, new Uint32Array(0))];
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toBe(CSV_BOM + DOCUMENT_CSV_COLUMNS.join(',') + '\r\n');
   });
 });
