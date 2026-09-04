@@ -57,6 +57,14 @@ export function DocumentFilters({ query, isFiltered, onChange, onClear }: Docume
             })
           }
           sx={{ minWidth: 190 }}
+          slotProps={{
+            // The same held-open label as the search beside it, so the pair
+            // reads as one row of controls. Without `displayEmpty` the select
+            // renders nothing at all under a shrunk label, which looks like a
+            // field that failed to load rather than one nothing is set on.
+            inputLabel: { shrink: true },
+            select: { displayEmpty: true },
+          }}
         >
           <MenuItem value="">All types</MenuItem>
           {DOCUMENT_TYPES.map((type) => (
