@@ -26,6 +26,27 @@ describe('DocumentSearch', () => {
   });
 
   /**
+   * A parent that re-renders inside the wait — the documents view does, once
+   * per chunk while an export streams — used to hand the field a fresh
+   * callback each time, and the timer keyed on it never ran.
+   */
+  it('still commits when the parent keeps re-rendering while the operator types', async () => {
+    const { user, onChange, view } = setup();
+
+    await user.type(box(), 'rah');
+
+    // Faster than the debounce, with a new callback identity every time.
+    const relay = vi.fn((term: string) => onChange(term));
+    for (let i = 0; i < 6; i += 1) {
+      view.rerender(<DocumentSearch value="" onChange={(term) => relay(term)} />);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+
+    await waitFor(() => expect(relay).toHaveBeenCalledWith('rah'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  /**
    * The URL arrives a router transition after the commit that asked for it. A
    * keystroke typed in that gap used to be thrown away: the older value landed,
    * was mistaken for a change made elsewhere, and overwrote the field.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { DataGrid, type GridPaginationModel, type GridSortModel } from '@mui/x-data-grid';
 import Paper from '@mui/material/Paper';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import type { DocumentSummary } from '@/domain/document';
 import { PAGE_SIZE_OPTIONS, gridPageSize } from '@/domain/pagination';
-import { SORT_FIELDS } from '@/server/corpus/query';
+import { SORT_FIELDS } from '@/domain/sort';
 import { useDocuments } from '@/store/polling';
 import { usePreferences } from '@/store/usePreferences';
 import { useDocumentQuery } from '../useDocumentQuery';
@@ -52,7 +52,12 @@ type DocumentsGridProps = {
   onOpen?: (document: DocumentSummary) => void;
 };
 
-export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
+/**
+ * Memoised on purpose, not defensively. Its parent re-renders once per chunk
+ * while an export streams, with props that do not change; measured, that was
+ * the whole of the export's render cost.
+ */
+export const DocumentsGrid = memo(function DocumentsGrid({ onOpen }: DocumentsGridProps) {
   const { query, goToPage, update, isFiltered, clear } = useDocumentQuery();
   const { density, pageSize: preferredPageSize } = usePreferences();
 
@@ -179,4 +184,4 @@ export function DocumentsGrid({ onOpen }: DocumentsGridProps) {
       />
     </Paper>
   );
-}
+});
