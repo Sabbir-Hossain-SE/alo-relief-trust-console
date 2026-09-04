@@ -6,7 +6,7 @@ import {
   type CountryCode,
 } from 'libphonenumber-js/max';
 import EXAMPLES from 'libphonenumber-js/examples.mobile.json';
-import { DEFAULT_PHONE_COUNTRY, phoneCountry } from './countries';
+import { DEFAULT_PHONE_COUNTRY, countryForCallingCode, phoneCountry } from './countries';
 
 /**
  * `max` metadata rather than the default `min`.
@@ -71,12 +71,54 @@ export function splitPhone(
   return { country: fallback, national: withoutCallingCode(trimmed, fallback) };
 }
 
-// Joins the two halves back into the E.164 string the archive stores.
+/**
+ * Joins the two halves back into the E.164 string the archive stores.
+ *
+ * Numbers are written locally with a trunk prefix — 01712 345678 on every form
+ * filed in Bangladesh — and E.164 leaves that prefix out. Pasting the digits
+ * behind the calling code as they were typed stored +88001712345678, a number
+ * the validator happened to tolerate and no gateway would dial. The parser
+ * knows each plan's prefix; the plain join remains for input too short to parse.
+ */
 export function joinPhone(country: CountryCode, national: string): string {
   const digits = digitsOf(national);
   if (digits === '') return '';
 
+  const parsed = parsePhoneNumberFromString(digits, country);
+  if (parsed !== undefined && parsed.countryCallingCode === getCountryCallingCode(country)) {
+    return parsed.number;
+  }
+
   return `+${getCountryCallingCode(country)}${digits}`;
+}
+
+/**
+ * Reads a number that arrived carrying its own calling code.
+ *
+ * An operator copying a number from a spreadsheet pastes "+44 20 7946 0958"
+ * into the digits box with Bangladesh still selected. Treated as national
+ * digits that becomes +880442079460958 — the calling code doubled and the
+ * country wrong. Returns null for anything without a code in front of it, so
+ * ordinary typing is untouched.
+ */
+export function internationalPhone(input: string, current: CountryCode): PhoneParts | null {
+  const trimmed = input.trim();
+  // 00 is the international prefix in Bangladesh and most of the world; a
+  // national number never starts with two zeros.
+  const withPlus = trimmed.startsWith('00') ? `+${trimmed.slice(2)}` : trimmed;
+  if (!withPlus.startsWith('+')) return null;
+
+  const parsed = parsePhoneNumberFromString(withPlus);
+  if (parsed === undefined) return null;
+
+  const country =
+    parsed.country ??
+    (parsed.countryCallingCode === getCountryCallingCode(current)
+      ? current
+      : countryForCallingCode(parsed.countryCallingCode));
+  if (country === undefined) return null;
+
+  return { country, national: parsed.nationalNumber };
 }
 
 /**

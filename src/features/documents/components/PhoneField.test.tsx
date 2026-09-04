@@ -43,6 +43,43 @@ describe('PhoneField', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  /**
+   * Every number on a form filed in Bangladesh is written 01712-345678, and an
+   * operator copies it as written. The stored value has to lose the 0.
+   */
+  it('stores a number typed as it is written locally, trunk prefix and all', async () => {
+    const { onSave, user } = setup();
+    const phone = screen.getByLabelText('Phone');
+
+    await user.clear(phone);
+    await user.type(phone, '01712345678');
+    await user.click(screen.getByRole('button', { name: 'Save corrections' }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith([{ field: 'phone', value: '+8801712345678' }]),
+    );
+  });
+
+  // Pasted from a spreadsheet with its calling code in front, into the digits
+  // box, with Bangladesh still selected. Read as national digits that became
+  // +880442079460958 — the code doubled and the country wrong.
+  it('follows a number pasted with its own calling code to its country', async () => {
+    const { onSave, user } = setup();
+    const phone = screen.getByLabelText('Phone');
+
+    await user.clear(phone);
+    await user.click(phone);
+    await user.paste('+44 20 7946 0958');
+
+    expect(screen.getByLabelText('Phone country')).toHaveTextContent('GB +44');
+    expect(phone).toHaveValue('2079460958');
+
+    await user.click(screen.getByRole('button', { name: 'Save corrections' }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith([{ field: 'phone', value: '+442079460958' }]),
+    );
+  });
+
   it('keeps the number when the country changes, and restates it in E.164', async () => {
     const { onSave, user } = setup();
 
