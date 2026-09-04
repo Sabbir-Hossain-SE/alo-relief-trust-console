@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createUploadQueue } from './queue';
-import { TASK_STATUSES } from './types';
+import { PermanentFailure, TASK_STATUSES, isPermanentFailure } from './types';
 import type { QueueItem, RunContext } from './types';
 
 function items(count: number): QueueItem[] {
@@ -196,6 +196,40 @@ describe('retry and backoff', () => {
     await queue.start();
 
     expect(seen).toEqual([1, 2, 3]);
+  });
+
+  // A server that refused a file — a name too long, a shape it does not take —
+  // refuses it identically every time, and backing off between refusals only
+  // spends seconds per file learning nothing.
+  it('gives up at once on a failure another attempt cannot help', async () => {
+    let calls = 0;
+    const { sleep, delays } = recordingSleep();
+
+    const queue = createUploadQueue(items(1), {
+      maxAttempts: 3,
+      sleep,
+      run: async () => {
+        calls += 1;
+        throw new PermanentFailure('That file could not be read.');
+      },
+    });
+
+    await queue.start();
+
+    expect(calls).toBe(1);
+    expect(delays).toEqual([]);
+    expect(queue.snapshot().tasks[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      error: 'That file could not be read.',
+    });
+  });
+
+  it('recognises a permanent failure by shape, not only by class', () => {
+    expect(isPermanentFailure(new PermanentFailure('no'))).toBe(true);
+    expect(isPermanentFailure({ permanent: true })).toBe(true);
+    expect(isPermanentFailure(new Error('network'))).toBe(false);
+    expect(isPermanentFailure(null)).toBe(false);
   });
 
   it('keeps one failure from stopping the rest', async () => {

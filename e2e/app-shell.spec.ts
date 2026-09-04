@@ -90,6 +90,60 @@ test('remembers the choice across navigation and reload', async ({ page }) => {
   expect(await settledRailWidth(page)).toBe(collapsed);
 });
 
+/**
+ * The server cannot see the preference, so it renders the rail expanded. Left
+ * to React, the collapsed width arrived two renders after hydration and the
+ * rail was drawn wide and then animated shut on every load. An inline script
+ * now marks the document before the first paint, and the rail is laid out
+ * from that mark.
+ */
+test('paints a collapsed rail at its collapsed width from the first frame', async ({ page }) => {
+  const assertQuiet = failOnConsoleErrors(page);
+
+  // Records every width the rail is ever laid out at, from the moment it exists.
+  await page.addInitScript(() => {
+    const widths: number[] = [];
+    (window as unknown as { __railWidths: number[] }).__railWidths = widths;
+
+    const watch = () => {
+      const rail = document.getElementById('main-navigation');
+      if (rail === null) return false;
+
+      new ResizeObserver((entries) => {
+        for (const entry of entries) widths.push(entry.contentRect.width);
+      }).observe(rail);
+
+      return true;
+    };
+
+    // Observed on the document: at this point in the load the <html> element
+    // itself may not have been parsed yet.
+    if (!watch()) {
+      new MutationObserver((_mutations, observer) => {
+        if (watch()) observer.disconnect();
+      }).observe(document, { childList: true, subtree: true });
+    }
+  });
+
+  await open(page, '/documents');
+  await page.getByRole('button', { name: 'Collapse navigation' }).click();
+  const collapsed = await settledRailWidth(page);
+
+  await open(page, '/documents');
+  await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
+
+  const seen = await page.evaluate(
+    () => (window as unknown as { __railWidths: number[] }).__railWidths,
+  );
+
+  expect(seen.length).toBeGreaterThan(0);
+  // Never wider than its resting width: no frame of the expanded rail, and no
+  // animation from one to the other.
+  expect(Math.max(...seen)).toBeLessThanOrEqual(collapsed);
+
+  assertQuiet();
+});
+
 test('opens the navigation as a drawer on a small screen', async ({ page }) => {
   await page.setViewportSize({ width: 700, height: 900 });
   await open(page, '/documents');

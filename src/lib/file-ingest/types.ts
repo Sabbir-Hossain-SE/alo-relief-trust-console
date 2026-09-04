@@ -5,7 +5,12 @@ export type IngestedFile = {
   size: number;
 };
 
-export const REJECTION_REASONS = ['unsupported_format', 'file_too_large', 'empty_file'] as const;
+export const REJECTION_REASONS = [
+  'unsupported_format',
+  'file_too_large',
+  'empty_file',
+  'system_file',
+] as const;
 
 export type RejectionReason = (typeof REJECTION_REASONS)[number];
 

@@ -36,6 +36,16 @@ export const DEFAULT_PREFERENCES: Preferences = {
 export const PREFERENCES_STORAGE_KEY = 'alo.preferences.v1';
 
 /**
+ * Set on `<html>` while the navigation rail is collapsed.
+ *
+ * The rail is laid out from this mark rather than from React state. An inline
+ * script writes it from storage before the first paint, and the preferences
+ * sync keeps it in step afterwards, so the server-rendered page never shows
+ * the rail at the wrong width and animates it to the right one.
+ */
+export const NAV_COLLAPSED_ATTRIBUTE = 'data-nav-collapsed';
+
+/**
  * Reads saved preferences, falling back to defaults on anything unexpected.
  *
  * Parsed rather than cast: this is user-editable storage that may also hold a

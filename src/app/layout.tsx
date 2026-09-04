@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { AppShell } from '@/components/layout/AppShell';
+import { InitNavScript } from '@/components/layout/InitNavScript';
 import { MockApiGate, MockApiProvider } from '@/server/MockApiProvider';
 import { StoreProvider } from '@/store/StoreProvider';
 import { ThemeRegistry } from '@/theme/ThemeRegistry';
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
     >
       <body className="min-h-full">
         <InitColorSchemeScript attribute="class" defaultMode="system" />
+        <InitNavScript />
         <ThemeRegistry>
           <StoreProvider>
             <MockApiProvider>

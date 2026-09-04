@@ -27,14 +27,19 @@ export function apiUrl(path = ''): string {
   return `${origin}${API_BASE}${path}`;
 }
 
+const statusSchema = z.enum(PROCESSING_STATUSES);
+const documentTypeSchema = z.enum(DOCUMENT_TYPES);
+const confidenceBandSchema = z.enum(['high', 'medium', 'low']);
+const errorCodeSchema = z.enum(PROCESSING_ERROR_CODES);
+
 export const documentQuerySchema = z.object({
-  status: z.array(z.enum(PROCESSING_STATUSES)).optional(),
-  documentType: z.array(z.enum(DOCUMENT_TYPES)).optional(),
-  confidence: z.array(z.enum(['high', 'medium', 'low'])).optional(),
+  status: z.array(statusSchema).optional(),
+  documentType: z.array(documentTypeSchema).optional(),
+  confidence: z.array(confidenceBandSchema).optional(),
   search: z.string().optional(),
   needsAttention: z.boolean().optional(),
   batchId: z.string().min(1).max(64).optional(),
-  errorCode: z.array(z.enum(PROCESSING_ERROR_CODES)).optional(),
+  errorCode: z.array(errorCodeSchema).optional(),
   sortField: z.enum(SORT_FIELDS).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
   page: z.number().int().min(0).optional(),
@@ -43,8 +48,11 @@ export const documentQuerySchema = z.object({
 
 export type DocumentQueryInput = z.infer<typeof documentQuerySchema>;
 
+/** As long as a batch label may be. Shared with the upload, which cuts folder names to fit. */
+export const BATCH_LABEL_MAX_LENGTH = 120;
+
 export const createBatchSchema = z.object({
-  label: z.string().min(1).max(120),
+  label: z.string().min(1).max(BATCH_LABEL_MAX_LENGTH),
   /** How many documents the upload contained. */
   fileCount: z.number().int().min(1).max(50_000),
 });
@@ -151,7 +159,26 @@ export function toSearchParams(query: DocumentQueryInput): URLSearchParams {
   return params;
 }
 
-// Parses search params back into a query, dropping anything malformed.
+// Keeps the members of a repeated parameter the schema accepts, one by one.
+function accepted<T>(values: readonly string[], schema: z.ZodType<T>): T[] | undefined {
+  const kept = values.flatMap((value) => {
+    const parsed = schema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+
+  return kept.length > 0 ? kept : undefined;
+}
+
+/**
+ * Parses search params back into a query.
+ *
+ * Field by field rather than as one object. A URL is shared, bookmarked and
+ * hand-edited, and a link saved before a status was renamed carries one value
+ * the schema no longer knows beside four it still does. Failing the object
+ * threw all five away and showed the whole archive under a filter bar that said
+ * nothing was applied; dropping only the value it cannot read keeps the view
+ * the link was made to share.
+ */
 export function fromSearchParams(params: URLSearchParams): DocumentQueryInput {
   const numeric = (key: string): number | undefined => {
     const raw = params.get(key);
@@ -161,19 +188,26 @@ export function fromSearchParams(params: URLSearchParams): DocumentQueryInput {
     return Number.isInteger(value) ? value : undefined;
   };
 
-  const parsed = documentQuerySchema.safeParse({
-    status: params.getAll('status').length > 0 ? params.getAll('status') : undefined,
-    documentType: params.getAll('type').length > 0 ? params.getAll('type') : undefined,
-    confidence: params.getAll('confidence').length > 0 ? params.getAll('confidence') : undefined,
+  const candidate: Record<keyof DocumentQueryInput, unknown> = {
+    status: accepted(params.getAll('status'), statusSchema),
+    documentType: accepted(params.getAll('type'), documentTypeSchema),
+    confidence: accepted(params.getAll('confidence'), confidenceBandSchema),
     search: params.get('q') ?? undefined,
     needsAttention: params.get('attention') === '1' ? true : undefined,
     batchId: params.get('batch') ?? undefined,
-    errorCode: params.getAll('cause').length > 0 ? params.getAll('cause') : undefined,
+    errorCode: accepted(params.getAll('cause'), errorCodeSchema),
     sortField: params.get('sort') ?? undefined,
     sortDirection: params.get('dir') ?? undefined,
     page: numeric('page'),
     pageSize: numeric('pageSize'),
-  });
+  };
 
-  return parsed.success ? parsed.data : {};
+  const query: Record<string, unknown> = {};
+
+  for (const key of Object.keys(documentQuerySchema.shape) as (keyof DocumentQueryInput)[]) {
+    const parsed = (documentQuerySchema.shape[key] as z.ZodType).safeParse(candidate[key]);
+    if (parsed.success && parsed.data !== undefined) query[key] = parsed.data;
+  }
+
+  return query as DocumentQueryInput;
 }

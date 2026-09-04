@@ -8,6 +8,7 @@ import { useAppDispatch } from '@/store/hooks';
 import { usePreferences } from '@/store/usePreferences';
 import { SideNav } from './SideNav';
 import { TopBar } from './TopBar';
+import { useWindowDropGuard } from './useWindowDropGuard';
 
 /**
  * Frames every page: a full-width bar, then the navigation rail beside the
@@ -22,6 +23,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const { navCollapsed } = usePreferences();
   const dispatch = useAppDispatch();
+
+  useWindowDropGuard();
 
   return (
     <Box className="flex min-h-screen flex-col">

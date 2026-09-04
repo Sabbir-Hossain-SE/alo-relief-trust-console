@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   digitsOf,
+  internationalPhone,
   isStorablePhone,
   joinPhone,
   nationalPlaceholder,
   phoneProblem,
   splitPhone,
 } from './phone';
-import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRIES, phoneCountry } from './countries';
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_COUNTRIES,
+  countryForCallingCode,
+  phoneCountry,
+} from './countries';
 
 describe('splitPhone', () => {
   it('reads the country and the national digits out of a stored number', () => {
@@ -70,6 +76,77 @@ describe('joinPhone', () => {
   it('round-trips with splitPhone', () => {
     const parts = splitPhone('+8801712345678');
     expect(joinPhone(parts.country, parts.national)).toBe('+8801712345678');
+  });
+
+  /**
+   * Every number on a form filed in Bangladesh is written 01712-345678, and an
+   * operator copies it as written. E.164 has no trunk prefix, so the join has
+   * to know to take the 0 off — the naive one stored +88001712345678, which the
+   * validator happened to tolerate and no gateway would dial.
+   */
+  it('drops the trunk prefix a number is written with locally', () => {
+    expect(joinPhone('BD', '01712345678')).toBe('+8801712345678');
+    expect(joinPhone('BD', '01712-345678')).toBe('+8801712345678');
+    expect(joinPhone('GB', '020 7183 8750')).toBe('+442071838750');
+  });
+
+  it('still joins digits too short to be understood as a number', () => {
+    expect(joinPhone('BD', '1')).toBe('+8801');
+    expect(joinPhone('BD', '0171')).toBe('+8800171');
+  });
+
+  it('survives being rejoined and split while a local number is typed with its prefix', () => {
+    let stored = '';
+    for (const digit of '01712345678') {
+      const parts = splitPhone(stored, 'BD');
+      stored = joinPhone(parts.country, parts.national + digit);
+    }
+
+    expect(stored).toBe('+8801712345678');
+  });
+});
+
+describe('internationalPhone', () => {
+  it('reads the country out of a number pasted with its calling code', () => {
+    expect(internationalPhone('+44 20 7946 0958', 'BD')).toEqual({
+      country: 'GB',
+      national: '2079460958',
+    });
+    expect(internationalPhone('+880 1712-345678', 'GB')).toEqual({
+      country: 'BD',
+      national: '1712345678',
+    });
+  });
+
+  it('accepts the 00 an operator dials instead of a plus', () => {
+    expect(internationalPhone('0044 20 7946 0958', 'BD')).toEqual({
+      country: 'GB',
+      national: '2079460958',
+    });
+  });
+
+  it('leaves national digits alone, including ones that begin with one zero', () => {
+    expect(internationalPhone('1712345678', 'BD')).toBeNull();
+    expect(internationalPhone('01712345678', 'BD')).toBeNull();
+    expect(internationalPhone('', 'BD')).toBeNull();
+  });
+
+  it('is null for a plus with nothing readable behind it', () => {
+    expect(internationalPhone('+', 'BD')).toBeNull();
+    expect(internationalPhone('+9', 'BD')).toBeNull();
+  });
+
+  it('keeps the selected country when the code matches but the number cannot be placed', () => {
+    // Ten digits behind +44 is not a number the UK issues, so the parser
+    // reports the code and no country. The selection already says which.
+    expect(internationalPhone('+441711111111', 'GB')).toEqual({
+      country: 'GB',
+      national: '1711111111',
+    });
+  });
+
+  it('picks a country for a code the selection does not match', () => {
+    expect(internationalPhone('+441711111111', 'BD')?.country).toBe('GB');
   });
 });
 
@@ -145,5 +222,10 @@ describe('the country list', () => {
 
   it('falls back to the archive s own country for a code it does not know', () => {
     expect(phoneCountry('ZZ' as never).code).toBe(DEFAULT_PHONE_COUNTRY);
+  });
+
+  it('finds a country by the code it dials with', () => {
+    expect(countryForCallingCode('880')).toBe('BD');
+    expect(countryForCallingCode('999')).toBeUndefined();
   });
 });

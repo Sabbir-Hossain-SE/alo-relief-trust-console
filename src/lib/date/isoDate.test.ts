@@ -6,9 +6,11 @@ import {
   documentDateProblem,
   epochOfIsoDate,
   isRealDate,
+  localIsoDate,
 } from './isoDate';
 
-const NOW = Date.UTC(2026, 8, 4);
+/** Midday on the 4th by the local clock, so the day is the same in every timezone. */
+const NOW = new Date(2026, 8, 4, 12).getTime();
 
 describe('isRealDate', () => {
   it('accepts a day that exists', () => {
@@ -56,9 +58,30 @@ describe('documentDateProblem', () => {
     expect(documentDateProblem('2026-09-04', NOW)).toBeNull();
   });
 
+  /**
+   * The archive is worked from Dhaka, six hours ahead of UTC. At two in the
+   * morning there, UTC is still on yesterday, and a check made against UTC
+   * midnight refused a document dated the day it was actually filed.
+   */
+  it('accepts today by the operator s clock, however far ahead of UTC it is', () => {
+    const smallHours = new Date(2026, 8, 4, 2).getTime();
+    expect(documentDateProblem('2026-09-04', smallHours)).toBeNull();
+  });
+
   it('reads today from the clock when it is not told otherwise', () => {
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const tomorrow = localIsoDate(Date.now() + 86_400_000);
     expect(documentDateProblem(tomorrow)).toBe('future');
+  });
+});
+
+describe('localIsoDate', () => {
+  it('names the day the local clock is on, zero-padded', () => {
+    expect(localIsoDate(new Date(2024, 2, 8, 9).getTime())).toBe('2024-03-08');
+  });
+
+  it('follows the local day rather than the UTC one across midnight', () => {
+    const justAfterMidnight = new Date(2026, 8, 4, 0, 30).getTime();
+    expect(localIsoDate(justAfterMidnight)).toBe('2026-09-04');
   });
 });
 

@@ -6,7 +6,7 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import type { CountryCode } from 'libphonenumber-js/max';
 import { PHONE_COUNTRIES, phoneCountry } from '@/lib/phone/countries';
-import { joinPhone, nationalPlaceholder, splitPhone } from '@/lib/phone/phone';
+import { internationalPhone, joinPhone, nationalPlaceholder, splitPhone } from '@/lib/phone/phone';
 
 type PhoneFieldProps = {
   label: string;
@@ -42,6 +42,14 @@ export function PhoneField({ label, labelId, value, error, onChange, onBlur }: P
   const change = (nextCountry: CountryCode, digits: string) => {
     setChosen(nextCountry);
     onChange(joinPhone(nextCountry, digits));
+  };
+
+  // A number pasted with its own calling code names its country, and the
+  // selector follows it rather than doubling the code onto the digits.
+  const changeDigits = (typed: string) => {
+    const pasted = internationalPhone(typed, country);
+    if (pasted === null) change(country, typed);
+    else change(pasted.country, pasted.national);
   };
 
   return (
@@ -82,7 +90,7 @@ export function PhoneField({ label, labelId, value, error, onChange, onBlur }: P
         // number that grows a country code per keystroke.
         value={national}
         placeholder={nationalPlaceholder(country)}
-        onChange={(event) => change(country, event.target.value)}
+        onChange={(event) => changeDigits(event.target.value)}
         onBlur={onBlur}
         error={error !== undefined}
         // On the number rather than the country: MUI wires helperText to the

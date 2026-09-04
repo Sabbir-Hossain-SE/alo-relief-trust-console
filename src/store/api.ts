@@ -17,6 +17,10 @@ import type { BatchSummary } from '@/server/simulator/batch';
 /**
  * The only place the app talks to the API.
  *
+ * Identifiers are encoded into the path. They arrive from the address bar as
+ * often as from the archive, and `?doc=a/b` unencoded is a request for a route
+ * that does not exist rather than for a document that does not.
+ *
  * Tags are deliberately coarse. A batch finishing changes rows, counts and the
  * batch itself, and the alternative — tracking which of 100,000 documents moved
  * — would cost far more than refetching one page of fifty.
@@ -44,12 +48,16 @@ export const api = createApi({
     }),
 
     getDocument: build.query<DocumentDetail, string>({
-      query: (id) => `/documents/${id}`,
+      query: (id) => `/documents/${encodeURIComponent(id)}`,
       providesTags: (_result, _error, id) => [{ type: 'Document', id }],
     }),
 
     correctDocument: build.mutation<DocumentDetail, { id: string } & CorrectionsInput>({
-      query: ({ id, ...body }) => ({ url: `/documents/${id}`, method: 'PATCH', body }),
+      query: ({ id, ...body }) => ({
+        url: `/documents/${encodeURIComponent(id)}`,
+        method: 'PATCH',
+        body,
+      }),
       // A correction can resolve the review that put the document in the queue,
       // so the list and the counts both change, not just this record.
       invalidatesTags: (_result, _error, { id }) => [
@@ -60,7 +68,7 @@ export const api = createApi({
     }),
 
     retryDocument: build.mutation<RetryResult, string>({
-      query: (id) => ({ url: `/documents/${id}/retry`, method: 'POST' }),
+      query: (id) => ({ url: `/documents/${encodeURIComponent(id)}/retry`, method: 'POST' }),
       invalidatesTags: (_result, _error, id) => [
         { type: 'Document', id },
         'Document',
@@ -70,7 +78,7 @@ export const api = createApi({
     }),
 
     sendDocumentToManualEntry: build.mutation<ManualEntryResult, string>({
-      query: (id) => ({ url: `/documents/${id}/manual-entry`, method: 'POST' }),
+      query: (id) => ({ url: `/documents/${encodeURIComponent(id)}/manual-entry`, method: 'POST' }),
       invalidatesTags: (_result, _error, id) => [
         { type: 'Document', id },
         'Document',
@@ -85,7 +93,7 @@ export const api = createApi({
     }),
 
     getBatch: build.query<BatchSummary, string>({
-      query: (id) => `/batches/${id}`,
+      query: (id) => `/batches/${encodeURIComponent(id)}`,
       providesTags: (_result, _error, id) => [{ type: 'Batch', id }],
     }),
 
@@ -96,7 +104,7 @@ export const api = createApi({
 
     retryBatch: build.mutation<RetryResult, { id: string; indices?: number[] }>({
       query: ({ id, indices }) => ({
-        url: `/batches/${id}/retry`,
+        url: `/batches/${encodeURIComponent(id)}/retry`,
         method: 'POST',
         body: { indices },
       }),
@@ -108,7 +116,7 @@ export const api = createApi({
       ],
     }),
     sendBatchToManualEntry: build.mutation<ManualEntryResult, string>({
-      query: (id) => ({ url: `/batches/${id}/manual-entry`, method: 'POST' }),
+      query: (id) => ({ url: `/batches/${encodeURIComponent(id)}/manual-entry`, method: 'POST' }),
       invalidatesTags: (_result, _error, id) => [
         { type: 'Batch', id },
         'Batch',

@@ -6,6 +6,7 @@ import {
   MAX_FILE_BYTES,
   REJECTION_LABELS,
   extensionOf,
+  isSystemFile,
   rejectionFor,
 } from './validate';
 
@@ -49,6 +50,28 @@ describe('rejectionFor', () => {
   it('holds the size limit exactly', () => {
     expect(rejectionFor('scan.pdf', MAX_FILE_BYTES)).toBeNull();
     expect(rejectionFor('scan.pdf', MAX_FILE_BYTES + 1)).toBe('file_too_large');
+  });
+
+  // A folder dragged from a Mac carries one of these at every level. Reported
+  // as "not a document format" they read as documents that went missing.
+  it('names the operating system s own files rather than blaming their format', () => {
+    expect(rejectionFor('.DS_Store', 6148)).toBe('system_file');
+    expect(rejectionFor('Thumbs.db', 1024)).toBe('system_file');
+    expect(rejectionFor('desktop.ini', 1024)).toBe('system_file');
+    // The AppleDouble shadow a Mac leaves beside every file on a memory stick.
+    expect(rejectionFor('._scan.pdf', 4096)).toBe('system_file');
+  });
+
+  it('checks for a system file before anything else, since an empty one is still not a document', () => {
+    expect(rejectionFor('.DS_Store', 0)).toBe('system_file');
+  });
+});
+
+describe('isSystemFile', () => {
+  it('knows the usual suspects, whatever their case', () => {
+    expect(isSystemFile('.DS_Store')).toBe(true);
+    expect(isSystemFile('THUMBS.DB')).toBe(true);
+    expect(isSystemFile('scan.pdf')).toBe(false);
   });
 });
 

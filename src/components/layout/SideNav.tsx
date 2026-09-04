@@ -4,10 +4,15 @@ import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import { BrandMark } from './BrandMark';
 import { NavList } from './NavList';
-import { NAV_RAIL_WIDTH, NAV_WIDTH, TOP_BAR_HEIGHT } from './navigation';
+import { NAV_RAIL_WIDTH, NAV_WIDTH, TOP_BAR_HEIGHT, WHEN_NAV_COLLAPSED } from './navigation';
 
 type SideNavProps = {
-  /** Reduced to an icon rail. Desktop only — a drawer is already all or nothing. */
+  /**
+   * Reduced to an icon rail. Desktop only — a drawer is already all or nothing.
+   *
+   * The rail's width does not read this; it follows the document's mark, which
+   * is set before the first paint. This is what React knows, for the tooltips.
+   */
   collapsed: boolean;
   open: boolean;
   onClose: () => void;
@@ -50,11 +55,15 @@ export function SideNav({ collapsed, open, onClose }: SideNavProps) {
         sx={{
           display: { xs: 'none', md: 'block' },
           flexShrink: 0,
-          width: collapsed ? NAV_RAIL_WIDTH : NAV_WIDTH,
+          width: NAV_WIDTH,
+          [WHEN_NAV_COLLAPSED]: { width: NAV_RAIL_WIDTH },
           position: 'sticky',
           top: TOP_BAR_HEIGHT,
           alignSelf: 'flex-start',
           height: `calc(100vh - ${TOP_BAR_HEIGHT}px)`,
+          // The visible viewport where the browser can say: on a tablet, vh
+          // includes the strip behind the address bar and the rail ran under it.
+          '@supports (height: 1dvh)': { height: `calc(100dvh - ${TOP_BAR_HEIGHT}px)` },
           overflowY: 'auto',
           borderRight: '1px solid',
           borderColor: 'divider',
