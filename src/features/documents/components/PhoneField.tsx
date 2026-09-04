@@ -6,7 +6,13 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import type { CountryCode } from 'libphonenumber-js/max';
 import { PHONE_COUNTRIES, phoneCountry } from '@/lib/phone/countries';
-import { internationalPhone, joinPhone, nationalPlaceholder, splitPhone } from '@/lib/phone/phone';
+import {
+  internationalPhone,
+  isPendingInternational,
+  joinPhone,
+  nationalPlaceholder,
+  splitPhone,
+} from '@/lib/phone/phone';
 
 type PhoneFieldProps = {
   label: string;
@@ -37,19 +43,30 @@ function countryCodeLabel(code: CountryCode): string {
  */
 export function PhoneField({ label, labelId, value, error, onChange, onBlur }: PhoneFieldProps) {
   const [chosen, setChosen] = useState<CountryCode>(() => splitPhone(value).country);
-  const { country, national } = splitPhone(value, chosen);
+
+  // An international number still being typed is shown as typed. It has no
+  // country to read yet, and split as a national number it lost its plus on
+  // the first keystroke and came out behind the wrong calling code.
+  const { country, national } = isPendingInternational(value)
+    ? { country: chosen, national: value }
+    : splitPhone(value, chosen);
 
   const change = (nextCountry: CountryCode, digits: string) => {
     setChosen(nextCountry);
     onChange(joinPhone(nextCountry, digits));
   };
 
-  // A number pasted with its own calling code names its country, and the
-  // selector follows it rather than doubling the code onto the digits.
+  // A number typed or pasted with its own calling code names its country, and
+  // the selector follows it rather than doubling the code onto the digits.
   const changeDigits = (typed: string) => {
-    const pasted = internationalPhone(typed, country);
-    if (pasted === null) change(country, typed);
-    else change(pasted.country, pasted.national);
+    if (isPendingInternational(typed)) {
+      onChange(typed);
+      return;
+    }
+
+    const international = internationalPhone(typed, country);
+    if (international === null) change(country, typed);
+    else change(international.country, international.national);
   };
 
   return (

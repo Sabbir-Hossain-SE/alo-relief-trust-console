@@ -26,9 +26,44 @@ export type PhoneParts = {
   national: string;
 };
 
+/** The zero of each numeral script the archive meets; its digits follow in order. */
+const DIGIT_ZEROS = [
+  0x0966, // Devanagari
+  0x09e6, // Bengali
+  0x0660, // Arabic-Indic
+  0x06f0, // Extended Arabic-Indic
+];
+
+/**
+ * Rewrites digits from other scripts as ASCII.
+ *
+ * `\d` matches ASCII alone. A number pasted in Bengali numerals — which is how
+ * many of the forms in this archive are filled in — was stripped as if it were
+ * punctuation, and the field emptied without a word.
+ */
+function asciiDigits(value: string): string {
+  return value.replace(/[\u0966-\u096f\u09e6-\u09ef\u0660-\u0669\u06f0-\u06f9]/g, (char) => {
+    const code = char.codePointAt(0) as number;
+    const zero = DIGIT_ZEROS.find((start) => code >= start && code <= start + 9) as number;
+    return String(code - zero);
+  });
+}
+
 // Strips everything a person might type as punctuation or spacing.
 export function digitsOf(value: string): string {
-  return value.replace(/\D/g, '');
+  return asciiDigits(value).replace(/\D/g, '');
+}
+
+/**
+ * The value with its international prefix as a plus, or null when it has none.
+ *
+ * 00 is the international prefix in Bangladesh and most of the world; a
+ * national number never starts with two zeros.
+ */
+function internationalForm(input: string): string | null {
+  const trimmed = asciiDigits(input).trim();
+  const withPlus = trimmed.startsWith('00') ? `+${trimmed.slice(2)}` : trimmed;
+  return withPlus.startsWith('+') ? withPlus : null;
 }
 
 // Digits with the country's calling code taken off, when the value carries one.
@@ -102,11 +137,8 @@ export function joinPhone(country: CountryCode, national: string): string {
  * ordinary typing is untouched.
  */
 export function internationalPhone(input: string, current: CountryCode): PhoneParts | null {
-  const trimmed = input.trim();
-  // 00 is the international prefix in Bangladesh and most of the world; a
-  // national number never starts with two zeros.
-  const withPlus = trimmed.startsWith('00') ? `+${trimmed.slice(2)}` : trimmed;
-  if (!withPlus.startsWith('+')) return null;
+  const withPlus = internationalForm(input);
+  if (withPlus === null) return null;
 
   const parsed = parsePhoneNumberFromString(withPlus);
   if (parsed === undefined) return null;
@@ -119,6 +151,21 @@ export function internationalPhone(input: string, current: CountryCode): PhonePa
   if (country === undefined) return null;
 
   return { country, national: parsed.nationalNumber };
+}
+
+/**
+ * Whether a value is an international number still being typed.
+ *
+ * A plus, or the 00 dialled instead of one, says the digits behind it carry
+ * their own calling code — and until enough of them have arrived to read it,
+ * there is no country to select and no national number to show. Such a value
+ * has to be shown exactly as typed, or the plus vanishes under the operator's
+ * cursor and the digits are read as national ones for whatever country was
+ * selected.
+ */
+export function isPendingInternational(value: string): boolean {
+  const withPlus = internationalForm(value);
+  return withPlus !== null && parsePhoneNumberFromString(withPlus) === undefined;
 }
 
 /**

@@ -80,6 +80,51 @@ describe('PhoneField', () => {
     );
   });
 
+  // Typed rather than pasted. Keystroke by keystroke the plus arrived alone,
+  // was read as no calling code at all, and every digit after it was filed
+  // under Bangladesh — so an operator could paste this number but not type it.
+  it('follows a number typed with its calling code, one key at a time', async () => {
+    const { onSave, user } = setup();
+    const phone = screen.getByLabelText('Phone');
+
+    await user.clear(phone);
+    await user.type(phone, '+442079460958');
+
+    expect(screen.getByLabelText('Phone country')).toHaveTextContent('GB +44');
+    expect(phone).toHaveValue('2079460958');
+
+    await user.click(screen.getByRole('button', { name: 'Save corrections' }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith([{ field: 'phone', value: '+442079460958' }]),
+    );
+  });
+
+  it('shows the plus while an international number is still too short to read', async () => {
+    const { user } = setup();
+    const phone = screen.getByLabelText('Phone');
+
+    await user.clear(phone);
+    await user.type(phone, '+44');
+
+    expect(phone).toHaveValue('+44');
+  });
+
+  it('reads a number written in Bengali numerals', async () => {
+    const { onSave, user } = setup();
+    const phone = screen.getByLabelText('Phone');
+
+    await user.clear(phone);
+    await user.click(phone);
+    await user.paste('০১৭১২৩৪৫৬৭৮');
+
+    expect(phone).toHaveValue('1712345678');
+
+    await user.click(screen.getByRole('button', { name: 'Save corrections' }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith([{ field: 'phone', value: '+8801712345678' }]),
+    );
+  });
+
   it('keeps the number when the country changes, and restates it in E.164', async () => {
     const { onSave, user } = setup();
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   digitsOf,
   internationalPhone,
+  isPendingInternational,
   isStorablePhone,
   joinPhone,
   nationalPlaceholder,
@@ -118,6 +119,13 @@ describe('internationalPhone', () => {
     });
   });
 
+  it('reads a number pasted in Bengali numerals', () => {
+    expect(internationalPhone('+৪৪ ২০ ৭৯৪৬ ০৯৫৮', 'BD')).toEqual({
+      country: 'GB',
+      national: '2079460958',
+    });
+  });
+
   it('accepts the 00 an operator dials instead of a plus', () => {
     expect(internationalPhone('0044 20 7946 0958', 'BD')).toEqual({
       country: 'GB',
@@ -207,6 +215,35 @@ describe('digitsOf', () => {
   it('strips everything a person types as spacing', () => {
     expect(digitsOf('+880 (17) 12-345678')).toBe('8801712345678');
     expect(digitsOf('')).toBe('');
+  });
+
+  // Many of the forms in this archive are filled in with Bengali numerals, and
+  // `\d` matches ASCII alone, so a number pasted from one emptied the field.
+  it('reads digits written in Bengali, Devanagari and Arabic-Indic numerals', () => {
+    expect(digitsOf('০১৭১২-৩৪৫৬৭৮')).toBe('01712345678');
+    expect(digitsOf('०१७१२३४५६७८')).toBe('01712345678');
+    expect(digitsOf('٠١٧١٢٣٤٥٦٧٨')).toBe('01712345678');
+    expect(digitsOf('۰۱۷۱۲۳۴۵۶۷۸')).toBe('01712345678');
+  });
+});
+
+describe('isPendingInternational', () => {
+  it('is true for a plus, or a 00, with too little behind it to read', () => {
+    for (const typed of ['+', '+4', '+44', '+442', '00', '004', '0044']) {
+      expect(isPendingInternational(typed)).toBe(true);
+    }
+  });
+
+  it('is false once the calling code and a start on the number can be read', () => {
+    expect(isPendingInternational('+4420')).toBe(false);
+    expect(isPendingInternational('+442079460958')).toBe(false);
+    expect(isPendingInternational('0044 20 7946 0958')).toBe(false);
+  });
+
+  it('is false for national digits, which are never pending', () => {
+    expect(isPendingInternational('')).toBe(false);
+    expect(isPendingInternational('0')).toBe(false);
+    expect(isPendingInternational('01712345678')).toBe(false);
   });
 });
 
