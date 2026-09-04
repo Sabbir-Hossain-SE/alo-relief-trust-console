@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import {
@@ -11,8 +13,29 @@ import {
   type DocumentDetail,
 } from '@/domain/document';
 import type { CorrectionInput } from '@/server/api-contract';
-import { CorrectionForm } from './CorrectionForm';
 import { FieldRow } from './FieldRow';
+
+/**
+ * Loaded when a record is actually being corrected.
+ *
+ * The form brings a date picker and a numbering plan for every country on
+ * earth — around a hundred kilobytes, for two fields that cannot be reached
+ * until a document is open and someone has chosen to edit it. Held in the main
+ * bundle, every operator paid for it on the way to a grid.
+ */
+const CorrectionForm = dynamic(
+  () => import('./CorrectionForm').then((module) => module.CorrectionForm),
+  {
+    ssr: false,
+    loading: () => (
+      <Box className="flex flex-col gap-3">
+        {NORMALIZED_FIELD_KEYS.map((key) => (
+          <Skeleton key={key} variant="rounded" height={72} />
+        ))}
+      </Box>
+    ),
+  },
+);
 
 type DocumentRecordProps = {
   document: DocumentDetail;

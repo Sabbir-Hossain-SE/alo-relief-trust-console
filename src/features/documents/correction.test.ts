@@ -40,14 +40,33 @@ describe('correctionFormSchema', () => {
     expect(correctionFormSchema.safeParse(blank).success).toBe(true);
   });
 
-  it('accepts the local number styles an archive actually holds', () => {
-    for (const phone of ['+8801711111111', '01711 111111', '(02) 55 66 77', '02-9556677']) {
+  it('accepts a number from any country, in the one form the archive stores', () => {
+    // The rule used to be a character class, which accepted "01711 111111" and
+    // "(02) 55 66 77" as different values for numbers that may be the same one.
+    // The field composes E.164 from a country and the national digits, so the
+    // archive holds one spelling per number.
+    for (const phone of ['+8801711111111', '+442071838750', '+14155552671']) {
       expect(correctionFormSchema.safeParse({ ...valid, phone }).success).toBe(true);
     }
   });
 
   it('rejects a phone number that is not one', () => {
     expect(correctionFormSchema.safeParse({ ...valid, phone: 'call the office' }).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects a number of the right length that no operator prefix matches', () => {
+    const parsed = correctionFormSchema.safeParse({ ...valid, phone: '+8801012345678' });
+
+    expect(parsed.success).toBe(false);
+    // Naming the country is the difference between a message an operator can
+    // act on and one that only says no.
+    expect(parsed.error?.issues[0]?.message).toBe('Not a valid Bangladesh number');
+  });
+
+  it('rejects a year that is almost certainly a mistyped one', () => {
+    expect(correctionFormSchema.safeParse({ ...valid, documentDate: '0024-03-18' }).success).toBe(
       false,
     );
   });

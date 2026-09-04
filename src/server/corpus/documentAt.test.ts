@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isStorablePhone } from '@/lib/phone/phone';
 import { NORMALIZED_FIELD_KEYS } from '@/domain/document';
 import { isMissing } from '@/domain/field';
 import { PROCESSING_STATUSES, type ProcessingStatus } from '@/domain/status';
@@ -178,9 +179,21 @@ describe('detailAt', () => {
     expect(after.fields.phone).toEqual(before.fields.phone);
   });
 
-  it('formats phone numbers consistently', () => {
-    const detail = detailAt(store, empty, firstWithStatus('completed'));
-    expect(detail.fields.phone.value).toMatch(/^\+8801\d{8}$/);
+  it('generates phone numbers the numbering plan allows', () => {
+    // Shape alone is not the assertion worth making: the archive used to
+    // produce +8801 followed by eight digits, which matches nothing a network
+    // would route and which the correction form now rejects on sight.
+    const values = Array.from({ length: 400 }, (_, index) =>
+      String(detailAt(store, empty, index).fields.phone.value ?? ''),
+    );
+
+    for (const [index, value] of values.entries()) {
+      expect(isStorablePhone(value), `${index} produced ${value}`).toBe(true);
+    }
+
+    // Extraction leaves some records without a phone at all, so a suite that
+    // only asserted "nothing invalid" could pass on an archive of blanks.
+    expect(values.filter((value) => value !== '').length).toBeGreaterThan(200);
   });
 
   it('dates the document on or before its upload', () => {

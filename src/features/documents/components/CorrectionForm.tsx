@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useId } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import {
   NORMALIZED_FIELD_KEYS,
   NORMALIZED_FIELD_LABELS,
@@ -23,6 +22,9 @@ import {
   uncertainFields,
   type CorrectionFormValues,
 } from '../correction';
+import { CorrectionField } from './CorrectionField';
+import { DocumentDateField } from './DocumentDateField';
+import { PhoneField } from './PhoneField';
 
 type CorrectionFormProps = {
   fields: NormalizedRecord;
@@ -41,6 +43,7 @@ type CorrectionFormProps = {
  */
 export function CorrectionForm({ fields, underReview, isSaving, onSave }: CorrectionFormProps) {
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -58,6 +61,11 @@ export function CorrectionForm({ fields, underReview, isSaving, onSave }: Correc
     reset(formValuesFrom(fields));
   }, [fields, reset]);
 
+  // One id per field, so each control is named by the caption above it rather
+  // than by a second copy of the same words in an aria-label.
+  const formId = useId();
+  const labelId = (key: keyof NormalizedRecord) => `${formId}-${key}`;
+
   const flagged = (key: keyof NormalizedRecord) => underReview && fieldNeedsReview(fields[key]);
   const outstanding = NORMALIZED_FIELD_KEYS.filter(flagged);
 
@@ -69,73 +77,88 @@ export function CorrectionForm({ fields, underReview, isSaving, onSave }: Correc
     : 'Nothing more on the page';
 
   return (
-    <Box
-      component="form"
-      noValidate
-      onSubmit={handleSubmit((values) => onSave(changedFields(fields, values)))}
-      className="flex flex-col gap-3"
-    >
-      {NORMALIZED_FIELD_KEYS.map((key) => {
-        const error = errors[key];
-        const needsAttention = flagged(key);
+    // The date adapter sits here rather than around the app: this form is the
+    // only thing with a picker in it, and it is loaded on demand, so a provider
+    // higher up would pull the adapter and its date library back into the
+    // bundle every screen pays for.
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Box
+        component="form"
+        noValidate
+        onSubmit={handleSubmit((values) => onSave(changedFields(fields, values)))}
+        className="flex flex-col gap-3"
+      >
+        {NORMALIZED_FIELD_KEYS.map((key) => {
+          const label = NORMALIZED_FIELD_LABELS[key];
+          const message = errors[key]?.message;
 
-        return (
-          <Box
-            key={key}
-            className="flex flex-col gap-1 rounded-lg p-2"
-            sx={(theme) => ({
-              backgroundColor: needsAttention
-                ? alpha(theme.palette.status.needs_review.fill, 0.08)
-                : 'transparent',
-            })}
-          >
-            <Box className="flex items-center justify-between gap-2">
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {NORMALIZED_FIELD_LABELS[key]}
-              </Typography>
+          return (
+            <CorrectionField
+              key={key}
+              label={label}
+              labelId={labelId(key)}
+              needsAttention={flagged(key)}
+              corrected={fields[key].source === 'manual'}
+            >
+              {key === 'phone' || key === 'documentDate' ? (
+                <Controller
+                  name={key}
+                  control={control}
+                  render={({ field }) => {
+                    const Field = key === 'phone' ? PhoneField : DocumentDateField;
 
-              {fields[key].source === 'manual' ? (
-                <Chip size="small" label="Corrected" sx={{ height: 20, fontSize: '0.7rem' }} />
-              ) : needsAttention ? (
-                <Typography variant="caption" sx={{ color: 'status.needs_review.ink' }}>
-                  Needs checking
-                </Typography>
-              ) : null}
-            </Box>
+                    return (
+                      <Field
+                        label={label}
+                        labelId={labelId(key)}
+                        value={field.value}
+                        error={message}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    );
+                  }}
+                />
+              ) : (
+                <TextField
+                  {...register(key)}
+                  size="small"
+                  fullWidth
+                  error={message !== undefined}
+                  // MUI wires helperText to the input with aria-describedby, and
+                  // `error` sets aria-invalid, so the message is announced with
+                  // the field rather than floating beside it.
+                  helperText={message ?? ' '}
+                  slotProps={{ htmlInput: { 'aria-labelledby': labelId(key) } }}
+                />
+              )}
+            </CorrectionField>
+          );
+        })}
 
-            <TextField
-              {...register(key)}
-              size="small"
-              fullWidth
-              error={error !== undefined}
-              // MUI wires helperText to the input with aria-describedby, and
-              // `error` sets aria-invalid, so the message is announced with the
-              // field rather than floating beside it.
-              helperText={error?.message ?? ' '}
-              slotProps={{ htmlInput: { 'aria-label': NORMALIZED_FIELD_LABELS[key] } }}
-            />
-          </Box>
-        );
-      })}
+        <Box className="flex flex-wrap items-center gap-2">
+          {/* Enabled whenever something changed, rather than gated on validity.
+            Errors surface on blur, so a Save that greys out while a field is
+            still being typed would withdraw the button without saying why;
+            submitting runs the whole schema and shows what is wrong. */}
+          <Button type="submit" variant="contained" disabled={!isDirty} loading={isSaving}>
+            Save corrections
+          </Button>
 
-      <Box className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="contained" disabled={!isDirty} loading={isSaving}>
-          Save corrections
-        </Button>
-
-        {/* The pipeline is often merely unsure rather than wrong. Confirming is
+          {/* The pipeline is often merely unsure rather than wrong. Confirming is
             recorded as a correction, so the audit trail shows a person checked
             it instead of the flag quietly disappearing. */}
-        {outstanding.length > 0 && !isDirty ? (
-          <Button
-            variant="outlined"
-            loading={isSaving}
-            onClick={() => onSave(uncertainFields(getValues(), flagged))}
-          >
-            {confirmLabel}
-          </Button>
-        ) : null}
+          {outstanding.length > 0 && !isDirty ? (
+            <Button
+              variant="outlined"
+              loading={isSaving}
+              onClick={() => onSave(uncertainFields(getValues(), flagged))}
+            >
+              {confirmLabel}
+            </Button>
+          ) : null}
+        </Box>
       </Box>
-    </Box>
+    </LocalizationProvider>
   );
 }

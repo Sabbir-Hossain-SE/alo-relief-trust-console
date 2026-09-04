@@ -207,6 +207,24 @@ describe('PATCH /documents/:id', () => {
     expect(body.corrections).toHaveLength(3);
   });
 
+  it('rejects a correction the form would not have allowed', async () => {
+    // The form is where an operator meets these rules, but a backend that takes
+    // whatever reaches it is trusting the client rather than validating.
+    const target = await findNeedsReview();
+
+    for (const correction of [
+      { field: 'phone', value: '+8801012345678' },
+      { field: 'documentDate', value: '2099-01-01' },
+    ]) {
+      const { status, body } = await send<ApiError>('PATCH', `/documents/${target.id}`, {
+        corrections: [correction],
+      });
+
+      expect(status, `${correction.field} was accepted`).toBe(400);
+      expect(body.code).toBe('invalid_request');
+    }
+  });
+
   it('rejects a pass with no corrections in it', async () => {
     const target = await findNeedsReview();
     const { status } = await send('PATCH', `/documents/${target.id}`, { corrections: [] });
@@ -218,10 +236,18 @@ describe('PATCH /documents/:id', () => {
     const target = await findNeedsReview();
     const detail = await get<DocumentDetail>(`/documents/${target.id}`);
 
-    // Every uncertain field answered, so there is nothing left to check.
+    // Every uncertain field answered, so there is nothing left to check. Each
+    // answer has to be valid for its own field: the phone and the date are
+    // checked against the same rules the correction form applies, so one filler
+    // string for all five is rejected before anything is applied.
+    const answers: Record<string, string> = {
+      phone: '+8801700000000',
+      documentDate: '2024-03-18',
+    };
+
     const corrections = Object.entries(detail.body.fields)
       .filter(([, field]) => field.source !== 'manual' && field.confidence < 0.7)
-      .map(([field]) => ({ field, value: 'Checked by hand' }));
+      .map(([field]) => ({ field, value: answers[field] ?? 'Checked by hand' }));
 
     expect(corrections.length).toBeGreaterThan(0);
 
