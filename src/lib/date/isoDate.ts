@@ -30,6 +30,21 @@ export function isRealDate(value: string): boolean {
 }
 
 /**
+ * Today as YYYY-MM-DD, by the operator's own clock.
+ *
+ * Local rather than UTC on purpose. The archive is worked from Dhaka, six hours
+ * ahead of UTC, where "today" is a date UTC has not reached until six in the
+ * morning — so measured against UTC, a document dated the day it was filed was
+ * refused as being from the future for the first quarter of every working day.
+ */
+export function localIsoDate(now: number = Date.now()): string {
+  const date = new Date(now);
+  const pad = (part: number) => String(part).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
  * What is wrong with a document date, or null when nothing is.
  *
  * Empty is not a problem: a scan with no legible date on it is a fact about the
@@ -41,7 +56,8 @@ export function documentDateProblem(value: string, now: number = Date.now()): Da
   if (!ISO_DATE.test(value)) return 'malformed';
   if (!isRealDate(value)) return 'impossible';
   if (epochOfIsoDate(value) < epochOfIsoDate(EARLIEST_DOCUMENT_DATE)) return 'too-early';
-  if (epochOfIsoDate(value) > now) return 'future';
+  // Zero-padded ISO days compare as strings, which sidesteps the timezone entirely.
+  if (value > localIsoDate(now)) return 'future';
 
   return null;
 }
