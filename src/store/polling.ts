@@ -14,6 +14,16 @@ import {
 export const POLL_INTERVAL_MS = 1500;
 
 /**
+ * Every poll here skips while the tab is in the background.
+ *
+ * Each tick re-reads the archive — a hundred thousand rows filtered and sorted
+ * in the worker — and a tab nobody is looking at gains nothing from it but a
+ * warm laptop. The clock is not lost: the simulation advances by observed
+ * time, so the first poll after the tab comes back reports where the batch
+ * actually is. Needs `setupListeners` on the store, which the provider does.
+ */
+
+/**
  * Watches one batch, polling only while it still has work.
  *
  * A fixed `pollingInterval` keeps refetching long after a batch has settled,
@@ -28,6 +38,7 @@ export function useBatch(batchId: string | undefined) {
   const result = useGetBatchQuery(batchId ?? '', {
     skip: batchId === undefined,
     pollingInterval: interval,
+    skipPollingIfUnfocused: true,
   });
 
   const desired = result.data !== undefined && result.data.settled ? 0 : POLL_INTERVAL_MS;
@@ -40,7 +51,10 @@ export function useBatch(batchId: string | undefined) {
 export function useBatches() {
   const [interval, setPollInterval] = useState(POLL_INTERVAL_MS);
 
-  const result = useGetBatchesQuery(undefined, { pollingInterval: interval });
+  const result = useGetBatchesQuery(undefined, {
+    pollingInterval: interval,
+    skipPollingIfUnfocused: true,
+  });
 
   const anyRunning = result.data?.some((batch) => !batch.settled) ?? false;
   const desired = result.data !== undefined && !anyRunning ? 0 : POLL_INTERVAL_MS;
@@ -67,6 +81,7 @@ export function useSummary() {
 
   return useGetSummaryQuery(undefined, {
     pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+    skipPollingIfUnfocused: true,
   });
 }
 
@@ -76,6 +91,7 @@ export function useAnalytics() {
 
   return useGetAnalyticsQuery(undefined, {
     pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+    skipPollingIfUnfocused: true,
   });
 }
 
@@ -85,5 +101,6 @@ export function useDocuments(query: DocumentQueryInput) {
 
   return useGetDocumentsQuery(query, {
     pollingInterval: changing ? POLL_INTERVAL_MS : 0,
+    skipPollingIfUnfocused: true,
   });
 }

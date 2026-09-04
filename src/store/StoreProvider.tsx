@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Provider } from 'react-redux';
+import { setupListeners } from '@reduxjs/toolkit/query';
 import { makeStore } from './store';
 import { usePreferencesSync } from './usePreferences';
 
@@ -15,6 +16,9 @@ function PreferencesSync() {
 // a ref may not be read during render.
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [store] = useState(makeStore);
+
+  // Tracks focus for the polls in `polling.ts`, which stop while the tab is hidden.
+  useEffect(() => setupListeners(store.dispatch), [store]);
 
   return (
     <Provider store={store}>
